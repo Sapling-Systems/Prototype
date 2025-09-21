@@ -1,0 +1,7 @@
+[package]
+name = "sapling-query-engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sapling-data-model.workspace = true

@@ -1,0 +1,12 @@
+[workspace]
+resolver = "3"
+members = ["apps/ide", "apps/spec-validator","crates/sapling-data-model", "crates/sapling-query-engine"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+
+
+[workspace.dependencies]
+sapling-data-model = { path = "crates/sapling-data-model" }
+sapling-query-engine = { path = "crates/sapling-query-engine" }

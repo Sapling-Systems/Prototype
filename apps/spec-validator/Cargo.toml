@@ -1,0 +1,8 @@
+[package]
+name = "spec-validator"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sapling-data-model.workspace = true
+sapling-query-engine.workspace = true
