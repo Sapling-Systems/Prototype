@@ -47,3 +47,28 @@ xy/y == 2
 >> d/y = 2
 >> e/x = 1
 >> e/y = 2
+
+
+country_de/country = 'germany'
+country_de/currency = 'euro'
+country_pl/country = 'poland'
+country_pl/currency = 'zloty'
+country_uk/country = 'uk'
+country_uk/currency = 'pound'
+country_fr/country = 'france'
+country_fr/currency = 'euro'
+country_xx/currency = 'euro'
+
+countries_with_euro/currency == 'euro'
+> ?countries_with_euro
+>> country_de/currency = 'euro'
+>> country_fr/currency = 'euro'
+>> country_xx/currency = 'euro'
+
+countries_with_euro_and_name/currency == 'euro'
+countries_with_euro_and_name/country == *
+> ?countries_with_euro_and_name
+>> country_de/country = 'germany'
+>> country_de/currency = 'euro'
+>> country_fr/country = 'france'
+>> country_fr/currency = 'euro'

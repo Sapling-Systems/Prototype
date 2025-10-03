@@ -3,6 +3,7 @@ use std::{ops::Sub, sync::Arc};
 
 use crate::{
   Database, System,
+  database::match_subject,
   machine::{AbstractMachine, UnificationInstruction},
 };
 
@@ -60,12 +61,16 @@ impl QueryEngine {
       instructions.push(UnificationInstruction::UnifySubject {
         variable: subject_variable,
       });
-      instructions.push(UnificationInstruction::CheckProperty {
-        property: query_fact.property.subject.clone(),
-      });
-      instructions.push(UnificationInstruction::CheckValue {
-        value: query_fact.value.subject.clone(),
-      });
+      if !match_subject(&query_fact.property.subject, &System::CORE_WILDCARD_SUBJECT) {
+        instructions.push(UnificationInstruction::CheckProperty {
+          property: query_fact.property.subject.clone(),
+        });
+      }
+      if !match_subject(&query_fact.value.subject, &System::CORE_WILDCARD_SUBJECT) {
+        instructions.push(UnificationInstruction::CheckValue {
+          value: query_fact.value.subject.clone(),
+        });
+      }
       instructions.push(UnificationInstruction::MaybeYield);
     }
     instructions.push(UnificationInstruction::YieldAll);

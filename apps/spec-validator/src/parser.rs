@@ -105,6 +105,7 @@ impl SubjectRegistry {
           value: value.to_string(),
         })
       }
+      Rule::wildcard_subject => Ok(System::CORE_WILDCARD_SUBJECT.clone()),
       _ => unreachable!("Unexpected subject rule: {:?}", pair.as_rule()),
     }
   }

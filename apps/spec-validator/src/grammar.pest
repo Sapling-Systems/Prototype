@@ -15,7 +15,8 @@ string = @{ ("\"" ~ (!"\"" ~ ANY)* ~ "\"") | ("'" ~ (!"'" ~ ANY)* ~ "'") }
 identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // Subjects
-subject = { boolean | float | integer | string | identifier }
+wildcard_subject = { "*" }
+subject          = { boolean | float | integer | string | identifier | wildcard_subject }
 
 // Subject selectors
 evaluated_marker   = { "?" }
