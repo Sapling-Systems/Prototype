@@ -10,3 +10,4 @@ edition = "2024"
 [workspace.dependencies]
 sapling-data-model = { path = "crates/sapling-data-model" }
 sapling-query-engine = { path = "crates/sapling-query-engine" }
+itertools = "0.14.0"

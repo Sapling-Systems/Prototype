@@ -5,3 +5,4 @@ edition.workspace = true
 
 [dependencies]
 sapling-data-model.workspace = true
+itertools.workspace = true

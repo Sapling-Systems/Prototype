@@ -1,0 +1,23 @@
+bar/name = 'bar'
+foo/name = 'foo'
+foo/age = 42
+foo/height = 1.82
+foo/related = bar
+
+> foo
+>> foo/name = 'foo'
+>> foo/age = 42
+>> foo/height = 1.82
+>> foo/related = bar
+
+a1/name = 'a1'
+a2/name = 'a2'
+a3/name = 'a3'
+a4/name = 'a4'
+query/name == 'a1'
+
+> query
+>> query/name == 'a1'
+
+> ?query
+>> a1/name = 'a1'

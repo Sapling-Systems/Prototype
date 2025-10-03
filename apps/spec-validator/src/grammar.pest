@@ -1,0 +1,46 @@
+WHITESPACE = _{ " " | "\t" | "\r" }
+COMMENT    = _{ "//" ~ (!"\n" ~ ANY)* }
+
+// Numbers
+integer = @{ ("-")? ~ ASCII_DIGIT+ }
+float   = @{ ("-")? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+
+// Booleans
+boolean = @{ "true" | "false" }
+
+// Strings
+string = @{ ("\"" ~ (!"\"" ~ ANY)* ~ "\"") | ("'" ~ (!"'" ~ ANY)* ~ "'") }
+
+// Identifiers
+identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Subjects
+subject = { boolean | float | integer | string | identifier }
+
+// Subject selectors
+evaluated_marker   = { "?" }
+property_separator = { "/" }
+subject_selector   = { evaluated_marker? ~ subject ~ (property_separator ~ subject)? }
+
+// Assignment operator
+operator            = _{ equals_operator | assignment_operator }
+assignment_operator =  { "=" }
+equals_operator     =  { "==" }
+
+// Meta subjects
+meta_prefix  = { "#" }
+meta_subject = { meta_prefix ~ subject }
+meta_list    = { meta_subject ~ ("," ~ meta_subject)* }
+
+// Facts - SUBJECT/PROPERTY = VALUE
+fact = { subject_selector ~ operator ~ subject_selector ~ meta_list? }
+
+// Query syntax
+query_marker    = { ">" }
+expected_marker = { ">>" }
+query_line      = { query_marker ~ subject_selector }
+expected_line   = { expected_marker ~ fact }
+
+// Test structure
+test_line = { fact | query_line | expected_line }
+test_file = { SOI ~ (test_line ~ NEWLINE*)* ~ EOI }

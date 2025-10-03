@@ -1,3 +1,4 @@
+#[derive(Clone, Debug)]
 pub enum Subject {
   Static { uuid: u128 },
   Integer { value: i64 },
@@ -5,6 +6,7 @@ pub enum Subject {
   String { value: String },
 }
 
+#[derive(Clone, Debug)]
 pub struct SubjectSelector {
   /// The target subject
   pub subject: Subject,
@@ -14,10 +16,19 @@ pub struct SubjectSelector {
   pub property: Option<Subject>,
 }
 
+#[derive(Clone, Debug)]
 pub struct Fact {
   pub subject: SubjectSelector,
   pub property: SubjectSelector,
   pub operator: Subject,
   pub value: SubjectSelector,
   pub meta: Subject,
+}
+
+#[derive(Clone, Debug)]
+pub struct Query {
+  pub subject: Subject,
+  pub property: Option<Subject>,
+  pub meta: Option<Subject>,
+  pub evaluated: bool,
 }
