@@ -70,8 +70,6 @@ impl QueryEngine {
     }
     instructions.push(UnificationInstruction::YieldAll);
 
-    println!("Instructions generated: \n{:#?}", instructions);
-
     AbstractMachine::new(instructions, &self.database)
   }
 }

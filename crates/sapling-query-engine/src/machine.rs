@@ -65,7 +65,7 @@ impl<'a> AbstractMachine<'a> {
     match instruction {
       // Simply allocates a new frame on the stack
       UnificationInstruction::AllocateFrame { size } => {
-        let new_frame = SearchFrame {
+        let mut new_frame = SearchFrame {
           current_instruction_index: instruction_index + 1,
           start_instruction_index: instruction_index + 1,
           variable_bindings: vec![VariableBinding::Unbound; *size],
@@ -73,6 +73,9 @@ impl<'a> AbstractMachine<'a> {
           iterator: self.database.iter_naive_facts(),
           trail: Vec::new(),
         };
+        if let Some(current_frame) = self.stack.last_mut() {
+          new_frame.variable_bindings = current_frame.variable_bindings.clone();
+        }
         self.stack.push(new_frame);
       }
       // Try to advance to the next fact otherwise exhaust the frame and stop if needed
@@ -95,8 +98,8 @@ impl<'a> AbstractMachine<'a> {
       UnificationInstruction::YieldAll => self.yielded.extend(
         self
           .stack
-          .iter()
-          .flat_map(|frame| frame.maybe_yielded.iter()),
+          .iter_mut()
+          .flat_map(|frame| frame.maybe_yielded.drain(..)),
       ),
 
       // Unification
