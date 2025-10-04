@@ -84,18 +84,22 @@ fn run_test(file_path: &Path) -> Result<bool> {
 
   for (i, query) in test_case.queries.iter().enumerate() {
     println!(
-      "  {} {} {}{}",
+      "  {} {} {}{}{}",
       "Query".green().bold(),
       i + 1,
       if query.subject_evaluated { "?" } else { "" },
-      format_subject(&engine, &query.subject)
+      format_subject(&engine, &query.subject),
+      match &query.property {
+        Some(subject) => format!("/{}", format_subject(&engine, subject)),
+        None => "".to_string(),
+      }
     );
 
     let actual_facts: Vec<&Fact> = engine
       .query(&Query {
         evaluated: query.subject_evaluated,
         meta: None,
-        property: None,
+        property: query.property.clone(),
         subject: query.subject.clone(),
       })
       .collect();

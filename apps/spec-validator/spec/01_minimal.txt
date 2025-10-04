@@ -72,3 +72,101 @@ countries_with_euro_and_name/country == *
 >> country_de/currency = 'euro'
 >> country_fr/country = 'france'
 >> country_fr/currency = 'euro'
+
+person1/name = 'Alice'
+person1/age = 30
+person1/country = country_de
+person2/name = 'Bob'
+person2/age = 25
+person2/country = country_uk
+person3/name = 'Charlie'
+person3/age = 35
+person3/country = country_fr
+person4/name = 'Diana'
+person4/age = 28
+person4/country = country_pl
+person5/name = 'Eve'
+person5/age = 22
+person5/country = country_fr
+person6/name = 'Frank'
+person6/age = 40
+person6/country = country_de
+person7/name = 'Grace'
+person7/age = 27
+person7/country = country_pl
+
+> person4/age
+>> person4/age = 28
+
+directMatch/someValue = person4/name
+
+> directMatch/someValue
+>> directMatch/someValue = person4/name
+
+> directMatch
+>> directMatch/someValue = person4/name
+
+directMatchQuery/name == 'Diana'
+> ?directMatchQuery
+>> person4/name = 'Diana'
+
+directMatchQuery2/someValue == 'Diana'
+> ?directMatchQuery2
+>> directMatch/someValue = person4/name
+
+euro_countries/currency == 'euro'
+people_in_euro_countries/name == *
+people_in_euro_countries/age == *
+people_in_euro_countries/country == ?euro_countries
+
+> ?people_in_euro_countries
+>> person1/name = 'Alice'
+>> person1/age = 30
+>> person1/country = country_de
+>> person3/name = 'Charlie'
+>> person3/age = 35
+>> person3/country = country_fr
+>> person5/name = 'Eve'
+>> person5/age = 22
+>> person5/country = country_fr
+>> person6/name = 'Frank'
+>> person6/age = 40
+>> person6/country = country_de
+
+thirdLevel1/person = person1
+thirdLevel1/a = 2
+thirdLevel2/person = person2
+thirdLevel2/a = 1
+thirdLevel3/person = person3
+thirdLevel3/a = 1
+thirdLevel4/person = person4
+thirdLevel4/a = 1
+
+deepQuery/person == ?people_in_euro_countries
+deepQuery/a == 1
+
+> deepQuery
+>> deepQuery/person == ?people_in_euro_countries
+>> deepQuery/a == 1
+
+> ?deepQuery
+>> thirdLevel3/person = person3
+>> thirdLevel3/a = 1
+
+> ?deepQuery/person
+>> thirdLevel3/person = person3
+
+evaluatedValue/value = ?deepQuery/a
+evaluatedValue/secret = 123456
+
+> evaluatedValue
+>> evaluatedValue/value = ?deepQuery/a
+>> evaluatedValue/secret = 123456
+
+findEvaluatedValue/value == 1
+> ?findEvaluatedValue
+>> evaluatedValue/value = ?deepQuery/a
+
+findEvaluatedValueEmpty/value == 25353
+> ?findEvaluatedValueEmpty
+>> (no results)

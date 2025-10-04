@@ -41,7 +41,8 @@ query_marker    = { ">" }
 expected_marker = { ">>" }
 query_line      = { query_marker ~ subject_selector }
 expected_line   = { expected_marker ~ fact }
+expected_empty  = { expected_marker ~ "(no results)" }
 
 // Test structure
-test_line = { fact | query_line | expected_line }
+test_line = { fact | query_line | expected_line | expected_empty }
 test_file = { SOI ~ (test_line ~ NEWLINE*)* ~ EOI }

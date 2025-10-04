@@ -14,6 +14,7 @@ pub struct Query {
   pub subject: Subject,
   pub subject_evaluated: bool,
   pub expected_facts: Vec<Fact>,
+  pub property: Option<Subject>,
 }
 
 #[derive(Debug, Clone)]
@@ -224,6 +225,7 @@ impl SubjectRegistry {
     let mut facts = Vec::new();
     let mut queries = Vec::new();
     let mut current_query_subject: Option<(Subject, bool)> = None;
+    let mut current_query_property: Option<Subject> = None;
     let mut current_expected_facts = Vec::new();
 
     for pair in pairs {
@@ -240,6 +242,7 @@ impl SubjectRegistry {
                           subject,
                           subject_evaluated: evaluated,
                           expected_facts: current_expected_facts,
+                          property: current_query_property.clone(),
                         });
                         current_expected_facts = Vec::new();
                       }
@@ -251,6 +254,7 @@ impl SubjectRegistry {
                           subject,
                           subject_evaluated: evaluated,
                           expected_facts: current_expected_facts,
+                          property: current_query_property.clone(),
                         });
                         current_expected_facts = Vec::new();
                       }
@@ -258,6 +262,7 @@ impl SubjectRegistry {
                         if let Rule::subject_selector = query_pair.as_rule() {
                           let selector = self.parse_subject_selector(query_pair)?;
                           current_query_subject = Some((selector.subject, selector.evaluated));
+                          current_query_property = selector.property;
                         }
                       }
                     }
@@ -286,6 +291,7 @@ impl SubjectRegistry {
         subject,
         subject_evaluated: evaluated,
         expected_facts: current_expected_facts,
+        property: current_query_property.clone(),
       });
     }
 
