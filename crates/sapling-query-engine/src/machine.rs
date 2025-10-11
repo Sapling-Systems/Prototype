@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use sapling_data_model::{Fact, Query, Subject};
 
-use crate::{Database, QueryEngine, database::match_subject, iterators::NaiveFactIterator};
+use crate::{Database, QueryEngine, System, database::match_subject, iterators::NaiveFactIterator};
 
 pub struct AbstractMachine<'a> {
   instructions: Vec<UnificationInstruction>,
@@ -10,6 +10,7 @@ pub struct AbstractMachine<'a> {
   query_engine: &'a QueryEngine,
   stack: Vec<SearchFrame<'a>>,
   yielded: VecDeque<&'a Fact>,
+  follow_evaluated_subjects: bool,
 }
 
 impl<'a> AbstractMachine<'a> {
@@ -22,6 +23,7 @@ impl<'a> AbstractMachine<'a> {
       instructions,
       database,
       query_engine,
+      follow_evaluated_subjects: true,
       yielded: VecDeque::new(),
       stack: Vec::new(),
     }
@@ -44,6 +46,21 @@ impl<'a> AbstractMachine<'a> {
     self.stack[0].reset();
   }
 
+  fn unwind_stack(&mut self) -> bool {
+    while self
+      .stack
+      .last()
+      .map(|f| f.current_investigated_fact.is_none())
+      .unwrap_or(false)
+    {
+      if !self.exhaust_frame() {
+        return false;
+      }
+    }
+
+    true
+  }
+
   fn step(&mut self) -> bool {
     let mut instruction_index = self
       .stack
@@ -53,6 +70,10 @@ impl<'a> AbstractMachine<'a> {
     if instruction_index >= self.instructions.len() {
       self.exhaust_stack();
       instruction_index = 1;
+    }
+
+    if !self.unwind_stack() {
+      return false;
     }
 
     // Advance instruction pointer
@@ -65,7 +86,7 @@ impl<'a> AbstractMachine<'a> {
       .instructions
       .get(instruction_index)
       .expect("Out of bounds instruction");
-    //println!("EXECUTING INSTRUCTION: {:?}", instruction);
+
     match instruction {
       // Simply allocates a new frame on the stack
       UnificationInstruction::AllocateFrame { size } => {
@@ -95,8 +116,24 @@ impl<'a> AbstractMachine<'a> {
       // Unification
       UnificationInstruction::UnifySubject { variable } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.current_investigated_fact.unwrap();
-        if !frame.unify(*variable, &fact.subject.subject) {
+        let fact = frame.get_subject_fact().unwrap();
+        let direct_match = frame.unify(*variable, &fact.subject.subject);
+
+        if direct_match {
+        } else if fact.subject.evaluated && self.follow_evaluated_subjects {
+          println!("instructions:\n{:#?}", self.instructions);
+          println!("starting subject frame for target subject = {:?}", variable);
+          let machine = self.query_engine.query(&Query {
+            subject: fact.subject.subject.clone(),
+            evaluated: true,
+            meta: None,
+            property: None,
+          });
+          let previous_frame = self.stack.last();
+          let new_frame =
+            SearchFrame::new_subject(machine, instruction_index + 1, previous_frame, 128);
+          self.stack.push(new_frame);
+        } else {
           frame.reset();
         }
       }
@@ -118,9 +155,24 @@ impl<'a> AbstractMachine<'a> {
       // Simple checks against the current fact
       UnificationInstruction::CheckSubject { subject } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.current_investigated_fact.unwrap();
-        if !match_subject(subject, &fact.subject.subject) {
-          let frame = self.stack.last_mut().unwrap();
+        let fact = frame.get_subject_fact().unwrap();
+        let direct_match = match_subject(subject, &fact.subject.subject);
+
+        if direct_match {
+        } else if fact.subject.evaluated && self.follow_evaluated_subjects {
+          let mut machine = self.query_engine.query(&Query {
+            subject: fact.subject.subject.clone(),
+            evaluated: fact.subject.evaluated,
+            meta: None,
+            property: None,
+          });
+          let evalutes_to_expected_subject = machine.any(|inner_fact| {
+            !inner_fact.subject.evaluated && match_subject(&inner_fact.subject.subject, subject)
+          });
+          if !evalutes_to_expected_subject {
+            frame.reset();
+          }
+        } else {
           frame.reset();
         }
       }
@@ -153,7 +205,8 @@ impl<'a> AbstractMachine<'a> {
             property: fact.value.property.clone(),
           });
           let previous_frame = self.stack.last();
-          let new_frame = SearchFrame::new_dynamic(machine, instruction_index, previous_frame, 128);
+          let new_frame =
+            SearchFrame::new_sub_query(machine, instruction_index, previous_frame, 128);
           self.stack.push(new_frame);
         } else {
           frame.reset();
@@ -167,10 +220,29 @@ impl<'a> AbstractMachine<'a> {
           frame.reset();
         }
       }
+      UnificationInstruction::CheckMeta { skip_system } => {
+        let frame = self.stack.last_mut().unwrap();
+        let fact = frame.get_subject_fact().unwrap();
+
+        if *skip_system && match_subject(&fact.meta, &System::CORE_META) {
+          frame.reset();
+        }
+      }
+      UnificationInstruction::SkipSubject { subject } => {
+        let frame = self.stack.last_mut().unwrap();
+        let fact = frame.get_subject_fact().unwrap();
+        let direct_match = match_subject(subject, &fact.subject.subject);
+        if direct_match {
+          frame.reset();
+        }
+      }
     }
 
-    let frame = self.stack.last_mut().unwrap();
-    if frame.current_investigated_fact.is_none() && !self.exhaust_frame() {
+    if !self.unwind_stack() {
+      return true;
+    }
+
+    if self.stack.is_empty() {
       return false;
     }
 
@@ -208,6 +280,7 @@ struct SearchFrame<'a> {
   state: FrameState<'a>,
   maybe_yielded: Vec<&'a Fact>,
   current_investigated_fact: Option<&'a Fact>,
+  current_investigated_subject_fact: Option<&'a Fact>,
 }
 
 impl<'a> SearchFrame<'a> {
@@ -225,9 +298,10 @@ impl<'a> SearchFrame<'a> {
       trail: Vec::new(),
       start_instruction_index,
       current_instruction_index: start_instruction_index,
-      state: FrameState::StaticFrame { iterator },
+      state: FrameState::Static { iterator },
       maybe_yielded: Vec::new(),
       current_investigated_fact,
+      current_investigated_subject_fact: None,
     };
 
     if let Some(previous_frame) = previous_frame {
@@ -237,7 +311,7 @@ impl<'a> SearchFrame<'a> {
     me
   }
 
-  pub fn new_dynamic(
+  pub fn new_sub_query(
     mut machine: AbstractMachine<'a>,
     start_instruction_index: usize,
     previous_frame: Option<&SearchFrame>,
@@ -250,9 +324,10 @@ impl<'a> SearchFrame<'a> {
       trail: Vec::new(),
       start_instruction_index,
       current_instruction_index: start_instruction_index,
-      state: FrameState::DynamicFrame { machine },
+      state: FrameState::SubQuery { machine },
       maybe_yielded: Vec::new(),
       current_investigated_fact,
+      current_investigated_subject_fact: None,
     };
 
     if let Some(previous_frame) = previous_frame {
@@ -261,11 +336,41 @@ impl<'a> SearchFrame<'a> {
 
     me
   }
+
+  pub fn new_subject<'b>(
+    mut machine: AbstractMachine<'a>,
+    start_instruction_index: usize,
+    previous_frame: Option<&'b SearchFrame<'a>>,
+    variable_count: usize,
+  ) -> Self {
+    machine.follow_evaluated_subjects = false;
+    let subject_fact = machine.next();
+
+    let mut me = Self {
+      variable_bindings: vec![VariableBinding::Unbound; variable_count],
+      trail: Vec::new(),
+      start_instruction_index,
+      current_instruction_index: start_instruction_index,
+      state: FrameState::Subject { machine },
+      maybe_yielded: Vec::new(),
+      current_investigated_fact: subject_fact,
+      current_investigated_subject_fact: subject_fact,
+    };
+
+    if let Some(fact) = subject_fact {
+      me.variable_bindings[0] = VariableBinding::Bound(fact.subject.subject.clone());
+    } else {
+      me.current_investigated_fact = None;
+    }
+
+    me
+  }
 }
 
 enum FrameState<'a> {
-  StaticFrame { iterator: NaiveFactIterator<'a> },
-  DynamicFrame { machine: AbstractMachine<'a> },
+  Static { iterator: NaiveFactIterator<'a> },
+  SubQuery { machine: AbstractMachine<'a> },
+  Subject { machine: AbstractMachine<'a> },
 }
 
 impl<'a> Iterator for FrameState<'a> {
@@ -273,24 +378,40 @@ impl<'a> Iterator for FrameState<'a> {
 
   fn next(&mut self) -> Option<Self::Item> {
     match self {
-      FrameState::StaticFrame { iterator } => iterator.next(),
-      FrameState::DynamicFrame { machine } => machine.next(),
+      FrameState::Static { iterator } => iterator.next(),
+      FrameState::SubQuery { machine } => machine.next(),
+      FrameState::Subject { machine } => machine.next(),
     }
   }
 }
 
 impl<'a> SearchFrame<'a> {
+  fn get_subject_fact(&self) -> Option<&'a Fact> {
+    self.current_investigated_fact
+    /*    self
+    .current_investigated_subject_fact
+    .or(self.current_investigated_fact)*/
+  }
+
   fn reset(&mut self) {
     // Advanced iterator
     match &mut self.state {
-      FrameState::DynamicFrame { machine } => {
-        self.current_investigated_fact = machine.next();
-        println!(
-          "Next dynamic frame item {:?}",
-          self.current_investigated_fact
-        );
+      FrameState::Subject { machine } => {
+        let subject_fact = machine.next();
+        if let Some(fact) = subject_fact {
+          self.variable_bindings[0] = VariableBinding::Bound(fact.subject.subject.clone());
+          self.current_investigated_subject_fact = subject_fact;
+          self.current_investigated_fact = subject_fact;
+        } else {
+          // Causes a reset of this frame
+          self.current_investigated_fact = None;
+          self.current_investigated_subject_fact = None;
+        }
       }
-      FrameState::StaticFrame { iterator } => {
+      FrameState::SubQuery { machine } => {
+        self.current_investigated_fact = machine.next();
+      }
+      FrameState::Static { iterator } => {
         self.current_investigated_fact = iterator.next();
       }
     }
@@ -348,6 +469,9 @@ pub enum UnificationInstruction {
   CheckOperator {
     operator: Subject,
   },
+  CheckMeta {
+    skip_system: bool,
+  },
 
   UnifySubject {
     variable: usize,
@@ -357,5 +481,9 @@ pub enum UnificationInstruction {
   },
   UnifyValue {
     variable: usize,
+  },
+
+  SkipSubject {
+    subject: Subject,
   },
 }

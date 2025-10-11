@@ -1,4 +1,4 @@
-use sapling_data_model::Query;
+use sapling_data_model::{Fact, Query, Subject};
 use std::sync::Arc;
 
 use crate::{
@@ -28,43 +28,53 @@ impl QueryEngine {
       .map(|m| self.database.get_query_meta(m))
       .unwrap_or_default();
 
-    let target_facts = self
-      .database
-      .get_facts_for_subject(&query.subject, &meta, !query.evaluated);
-
     if !query.evaluated {
       let mut instructions = vec![];
 
-      for fact in target_facts {
-        instructions.push(UnificationInstruction::AllocateFrame { size: 0 });
-        if yield_facts
-          && query
-            .property
-            .as_ref()
-            .map(|property| match_subject(property, &fact.property.subject))
-            .unwrap_or(true)
-        {
-          instructions.push(UnificationInstruction::MaybeYield);
-        }
-        instructions.push(UnificationInstruction::CheckSubject {
-          subject: query.subject.clone(),
-        });
+      instructions.push(UnificationInstruction::AllocateFrame { size: 0 });
+      instructions.push(UnificationInstruction::CheckSubject {
+        subject: query.subject.clone(),
+      });
+
+      if let Some(property) = &query.property {
         instructions.push(UnificationInstruction::CheckProperty {
-          property: fact.property.subject.clone(),
-        });
-        instructions.push(UnificationInstruction::CheckValue {
-          value: fact.value.subject.clone(),
-          property: fact.value.property.clone(),
+          property: property.clone(),
         });
       }
+
+      if !meta.include_system_meta {
+        instructions.push(UnificationInstruction::CheckMeta { skip_system: true });
+      }
+
       if yield_facts {
+        instructions.push(UnificationInstruction::MaybeYield);
         instructions.push(UnificationInstruction::YieldAll);
       }
 
       return instructions;
     }
 
+    let target_facts = self
+      .database
+      .get_facts_for_subject(&query.subject, &meta, !query.evaluated);
+
     let mut instructions = Vec::new();
+
+    if target_facts.is_empty() {
+      // Yield everything since there are no further restrictions
+      instructions.push(UnificationInstruction::AllocateFrame { size: 1 });
+      instructions.push(UnificationInstruction::MaybeYield);
+      instructions.push(UnificationInstruction::SkipSubject {
+        subject: query.subject.clone(),
+      });
+      instructions.push(UnificationInstruction::UnifySubject {
+        variable: subject_variable,
+      });
+      if yield_facts {
+        instructions.push(UnificationInstruction::YieldAll);
+      }
+      return instructions;
+    }
 
     for query_fact in target_facts {
       instructions.push(UnificationInstruction::AllocateFrame { size: 64 });
@@ -113,6 +123,7 @@ impl QueryEngine {
     if yield_facts {
       instructions.push(UnificationInstruction::YieldAll);
     }
+
     instructions
   }
 

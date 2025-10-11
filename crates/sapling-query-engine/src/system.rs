@@ -1,5 +1,3 @@
-use std::ops::Sub;
-
 use sapling_data_model::{Fact, Subject, SubjectSelector};
 
 use crate::Database;

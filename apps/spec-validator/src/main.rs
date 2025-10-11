@@ -1,15 +1,13 @@
+use anyhow::{Context, Result};
+use colored::*;
+use sapling_data_model::{Fact, Query, Subject};
+use sapling_query_engine::{QueryEngine, System};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
-use colored::*;
-
-use sapling_data_model::{Fact, Query, Subject};
-use sapling_query_engine::{QueryEngine, System};
-
 mod parser;
-use parser::SubjectRegistry;
+use parser::{SubjectRegistry, TestLine};
 
 fn format_subject(engine: &QueryEngine, subject: &Subject) -> String {
   match subject {
@@ -22,9 +20,11 @@ fn format_subject(engine: &QueryEngine, subject: &Subject) -> String {
           evaluated: false,
         })
         .next();
+
       if let Some(Subject::String { value }) = name.map(|fact| &fact.value.subject) {
         return value.clone();
       }
+
       format!("static_{}", uuid)
     }
     Subject::Integer { value } => value.to_string(),
@@ -72,79 +72,85 @@ fn run_test(file_path: &Path) -> Result<bool> {
 
   let mut database = registry.into_database();
 
-  // Add all facts to the database
-  for fact in test_case.facts {
-    database.add_fact(fact);
-  }
-
-  let engine = QueryEngine::new(Arc::new(database));
   let mut success = true;
+  let mut query_count = 0;
 
   println!("{}", format!("Running test: {:?}", file_path).blue().bold());
 
-  for (i, query) in test_case.queries.iter().enumerate() {
-    println!(
-      "  {} {} {}{}{}",
-      "Query".green().bold(),
-      i + 1,
-      if query.subject_evaluated { "?" } else { "" },
-      format_subject(&engine, &query.subject),
-      match &query.property {
-        Some(subject) => format!("/{}", format_subject(&engine, subject)),
-        None => "".to_string(),
+  for line in test_case.lines {
+    match line {
+      TestLine::Fact(fact) => {
+        database.add_fact(fact);
       }
-    );
+      TestLine::Query(query) => {
+        query_count += 1;
+        let engine = QueryEngine::new(Arc::new(database.clone()));
 
-    let actual_facts: Vec<&Fact> = engine
-      .query(&Query {
-        evaluated: query.subject_evaluated,
-        meta: None,
-        property: query.property.clone(),
-        subject: query.subject.clone(),
-      })
-      .collect();
+        let x = format_subject(&engine, &query.subject);
+        println!(
+          "  {} {} {}{}{}",
+          "Query".green().bold(),
+          query_count,
+          if query.subject_evaluated { "?" } else { "" },
+          format_subject(&engine, &query.subject),
+          match &query.property {
+            Some(subject) => format!("/{}", format_subject(&engine, subject)),
+            None => "".to_string(),
+          }
+        );
 
-    println!(
-      "  {} ({} facts)",
-      "Expected:".yellow(),
-      query.expected_facts.len()
-    );
-    for fact in &query.expected_facts {
-      println!("    {}", format_fact(&engine, fact));
-    }
+        let actual_facts: Vec<&Fact> = engine
+          .query(&Query {
+            evaluated: query.subject_evaluated,
+            meta: None,
+            property: query.property.clone(),
+            subject: query.subject.clone(),
+          })
+          .collect();
 
-    println!("  {} ({} facts)", "Actual:".cyan(), actual_facts.len());
-    for fact in &actual_facts {
-      println!("    {}", format_fact(&engine, fact));
-    }
-
-    // Compare expected vs actual
-    if actual_facts.len() != query.expected_facts.len() {
-      println!("  {}", "FAIL: Different number of facts".red().bold());
-      success = false;
-    } else {
-      // Simple comparison for now - in a real implementation you'd want more sophisticated matching
-      let mut matches = true;
-      for expected in &query.expected_facts {
-        let found = actual_facts.iter().any(|actual| {
-          // Simple structural comparison - this could be improved
-          format_fact(&engine, actual) == format_fact(&engine, expected)
-        });
-        if !found {
-          matches = false;
-          break;
+        println!(
+          "  {} ({} facts)",
+          "Expected:".yellow(),
+          query.expected_facts.len()
+        );
+        for fact in &query.expected_facts {
+          println!("    {}", format_fact(&engine, fact));
         }
-      }
 
-      if matches {
-        println!("  {}", "PASS".green().bold());
-      } else {
-        println!("  {}", "FAIL: Facts don't match".red().bold());
-        success = false;
+        println!("  {} ({} facts)", "Actual:".cyan(), actual_facts.len());
+        for fact in &actual_facts {
+          println!("    {}", format_fact(&engine, fact));
+        }
+
+        // Compare expected vs actual
+        if actual_facts.len() != query.expected_facts.len() {
+          println!("  {}", "FAIL: Different number of facts".red().bold());
+          success = false;
+        } else {
+          // Simple comparison for now - in a real implementation you'd want more sophisticated matching
+          let mut matches = true;
+          for expected in &query.expected_facts {
+            let found = actual_facts.iter().any(|actual| {
+              // Simple structural comparison - this could be improved
+              format_fact(&engine, actual) == format_fact(&engine, expected)
+            });
+            if !found {
+              matches = false;
+              break;
+            }
+          }
+
+          if matches {
+            println!("  {}", "PASS".green().bold());
+          } else {
+            println!("  {}", "FAIL: Facts don't match".red().bold());
+            success = false;
+          }
+        }
+
+        println!();
       }
     }
-
-    println!();
   }
 
   Ok(success)

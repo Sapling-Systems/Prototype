@@ -2,6 +2,7 @@ use sapling_data_model::{Fact, Subject};
 
 use crate::{meta::QueryMeta, system::System};
 
+#[derive(Clone, Debug)]
 pub struct Database {
   pub(crate) raw: Vec<Fact>,
   subject_next_id: u128,

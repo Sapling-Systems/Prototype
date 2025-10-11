@@ -170,3 +170,11 @@ findEvaluatedValue/value == 1
 findEvaluatedValueEmpty/value == 25353
 > ?findEvaluatedValueEmpty
 >> (no results)
+
+notFound/xyz == 999
+> ?notFound
+>> (no results)
+
+?everything/dynamicProperty = 'hello'
+> person1/dynamicProperty
+>> ?everything/dynamicProperty = 'hello'

@@ -18,9 +18,14 @@ pub struct Query {
 }
 
 #[derive(Debug, Clone)]
+pub enum TestLine {
+  Fact(Fact),
+  Query(Query),
+}
+
+#[derive(Debug, Clone)]
 pub struct TestCase {
-  pub facts: Vec<Fact>,
-  pub queries: Vec<Query>,
+  pub lines: Vec<TestLine>,
 }
 
 pub struct SubjectRegistry {
@@ -222,8 +227,7 @@ impl SubjectRegistry {
   pub fn parse_test_case(&mut self, input: &str) -> Result<TestCase> {
     let pairs = SpecParser::parse(Rule::test_file, input).context("Spec parser")?;
 
-    let mut facts = Vec::new();
-    let mut queries = Vec::new();
+    let mut lines = Vec::new();
     let mut current_query_subject: Option<(Subject, bool)> = None;
     let mut current_query_property: Option<Subject> = None;
     let mut current_expected_facts = Vec::new();
@@ -238,24 +242,24 @@ impl SubjectRegistry {
                   match line_content.as_rule() {
                     Rule::fact => {
                       if let Some((subject, evaluated)) = current_query_subject.take() {
-                        queries.push(Query {
+                        lines.push(TestLine::Query(Query {
                           subject,
                           subject_evaluated: evaluated,
                           expected_facts: current_expected_facts,
                           property: current_query_property.clone(),
-                        });
+                        }));
                         current_expected_facts = Vec::new();
                       }
-                      facts.push(self.parse_fact(line_content)?);
+                      lines.push(TestLine::Fact(self.parse_fact(line_content)?));
                     }
                     Rule::query_line => {
                       if let Some((subject, evaluated)) = current_query_subject.take() {
-                        queries.push(Query {
+                        lines.push(TestLine::Query(Query {
                           subject,
                           subject_evaluated: evaluated,
                           expected_facts: current_expected_facts,
                           property: current_query_property.clone(),
-                        });
+                        }));
                         current_expected_facts = Vec::new();
                       }
                       for query_pair in line_content.into_inner() {
@@ -287,15 +291,15 @@ impl SubjectRegistry {
 
     // Don't forget the last query if it exists
     if let Some((subject, evaluated)) = current_query_subject {
-      queries.push(Query {
+      lines.push(TestLine::Query(Query {
         subject,
         subject_evaluated: evaluated,
         expected_facts: current_expected_facts,
         property: current_query_property.clone(),
-      });
+      }));
     }
 
-    Ok(TestCase { facts, queries })
+    Ok(TestCase { lines })
   }
 
   pub fn into_database(self) -> Database {
