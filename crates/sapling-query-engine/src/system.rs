@@ -1,6 +1,6 @@
 use sapling_data_model::{Fact, Subject, SubjectSelector};
 
-use crate::Database;
+use crate::{Database, database::match_subject};
 
 pub struct System;
 

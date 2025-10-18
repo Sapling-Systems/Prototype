@@ -1,16 +1,26 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, fmt::Debug};
 
 use sapling_data_model::{Fact, Query, Subject};
 
-use crate::{Database, QueryEngine, System, database::match_subject, iterators::NaiveFactIterator};
+use crate::{
+  Database, QueryEngine, System, database::match_subject, instructions::UnificationInstruction,
+  iterators::NaiveFactIterator,
+};
 
 pub struct AbstractMachine<'a> {
-  instructions: Vec<UnificationInstruction>,
+  pub instructions: Vec<UnificationInstruction>,
   database: &'a Database,
   query_engine: &'a QueryEngine,
   stack: Vec<SearchFrame<'a>>,
-  yielded: VecDeque<&'a Fact>,
+  yielded: VecDeque<FoundFact<'a>>,
   follow_evaluated_subjects: bool,
+}
+
+#[derive(Clone)]
+pub struct FoundFact<'a> {
+  pub fact: &'a Fact,
+  pub fact_index: usize,
+  pub subject_binding: Option<Subject>,
 }
 
 impl<'a> AbstractMachine<'a> {
@@ -87,6 +97,8 @@ impl<'a> AbstractMachine<'a> {
       .get(instruction_index)
       .expect("Out of bounds instruction");
 
+    let mut reset_frame = false;
+
     match instruction {
       // Simply allocates a new frame on the stack
       UnificationInstruction::AllocateFrame { size } => {
@@ -102,7 +114,7 @@ impl<'a> AbstractMachine<'a> {
       // Yielding
       UnificationInstruction::MaybeYield => {
         let frame = self.stack.last_mut().unwrap();
-        if let Some(fact) = frame.current_investigated_fact {
+        if let Some(fact) = frame.current_investigated_fact.clone() {
           frame.maybe_yielded.push(fact)
         }
       }
@@ -116,46 +128,67 @@ impl<'a> AbstractMachine<'a> {
       // Unification
       UnificationInstruction::UnifySubject { variable } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.get_subject_fact().unwrap();
-        let direct_match = frame.unify(*variable, &fact.subject.subject);
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
+        let direct_match = !fact.subject.evaluated && frame.unify(*variable, &fact.subject.subject);
 
         if direct_match {
         } else if fact.subject.evaluated && self.follow_evaluated_subjects {
-          println!("instructions:\n{:#?}", self.instructions);
-          println!("starting subject frame for target subject = {:?}", variable);
-          let machine = self.query_engine.query(&Query {
+          let mut machine = self.query_engine.query(&Query {
             subject: fact.subject.subject.clone(),
-            evaluated: true,
+            evaluated: fact.subject.evaluated,
             meta: None,
             property: None,
           });
-          let previous_frame = self.stack.last();
-          let new_frame =
-            SearchFrame::new_subject(machine, instruction_index + 1, previous_frame, 128);
-          self.stack.push(new_frame);
+          machine.follow_evaluated_subjects = false;
+
+          if matches!(frame.variable_bindings[*variable], VariableBinding::Unbound) {
+            let new_frame = SearchFrame::new_subject_unification(
+              machine,
+              instruction_index + 1,
+              Some(frame),
+              64,
+              *variable,
+            );
+            self.stack.push(new_frame);
+          } else {
+            // If variable is already bound we can simply this to an check instructions and
+            // just look if the underlying subject query would yield anything that
+            // unifies with the binding
+            let matching_subject = machine.find(|inner_fact| {
+              let unifies = frame.unify(*variable, &inner_fact.fact.subject.subject);
+              !inner_fact.fact.subject.evaluated && unifies
+            });
+
+            if let Some(matching_subject) = matching_subject {
+              let fact = frame.current_investigated_fact.as_mut().unwrap();
+              fact.subject_binding = Some(matching_subject.fact.subject.subject.clone());
+            } else {
+              reset_frame = true;
+            }
+          }
         } else {
-          frame.reset();
+          reset_frame = true;
         }
       }
       UnificationInstruction::UnifyProperty { variable } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.current_investigated_fact.unwrap();
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
         if !frame.unify(*variable, &fact.property.subject) {
-          frame.reset();
+          reset_frame = true;
         }
       }
       UnificationInstruction::UnifyValue { variable } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.current_investigated_fact.unwrap();
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
         if !frame.unify(*variable, &fact.value.subject) {
-          frame.reset();
+          reset_frame = true;
         }
       }
 
       // Simple checks against the current fact
       UnificationInstruction::CheckSubject { subject } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.get_subject_fact().unwrap();
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
         let direct_match = match_subject(subject, &fact.subject.subject);
 
         if direct_match {
@@ -166,76 +199,94 @@ impl<'a> AbstractMachine<'a> {
             meta: None,
             property: None,
           });
+          machine.follow_evaluated_subjects = self.follow_evaluated_subjects;
+
           let evalutes_to_expected_subject = machine.any(|inner_fact| {
-            !inner_fact.subject.evaluated && match_subject(&inner_fact.subject.subject, subject)
+            !inner_fact.fact.subject.evaluated
+              && match_subject(&inner_fact.fact.subject.subject, subject)
           });
+
           if !evalutes_to_expected_subject {
-            frame.reset();
+            reset_frame = true;
+          } else {
+            let fact = frame.current_investigated_fact.as_mut().unwrap();
+            fact.subject_binding = Some(subject.clone());
           }
         } else {
-          frame.reset();
+          reset_frame = true;
         }
       }
       UnificationInstruction::CheckProperty { property } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.current_investigated_fact.unwrap();
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
         if !match_subject(property, &fact.property.subject) {
-          let frame = self.stack.last_mut().unwrap();
-          frame.reset();
+          reset_frame = true;
         }
       }
       UnificationInstruction::CheckValue { value, property } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.current_investigated_fact.unwrap();
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
 
         let direct_match = match_subject(value, &fact.value.subject);
         let property_match = match (&fact.value.property, property) {
           (None, None) => true,
-          (Some(a), Some(b)) if match_subject(&a, b) => true,
+          (Some(a), Some(b)) if match_subject(a, b) => true,
           _ => false,
         };
 
         // Simple case, we have a direct match of the value as well as property
         if direct_match && property_match {
         } else if fact.value.evaluated || fact.value.property.is_some() {
-          let machine = self.query_engine.query(&Query {
+          let mut machine = self.query_engine.query(&Query {
             subject: fact.value.subject.clone(),
             evaluated: fact.value.evaluated,
             meta: None,
             property: fact.value.property.clone(),
           });
+          machine.follow_evaluated_subjects = self.follow_evaluated_subjects;
+
           let previous_frame = self.stack.last();
           let new_frame =
             SearchFrame::new_sub_query(machine, instruction_index, previous_frame, 128);
           self.stack.push(new_frame);
         } else {
-          frame.reset();
+          reset_frame = true;
         }
       }
       UnificationInstruction::CheckOperator { operator } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.current_investigated_fact.unwrap();
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
         if !match_subject(operator, &fact.operator) {
-          let frame = self.stack.last_mut().unwrap();
-          frame.reset();
+          reset_frame = true;
         }
       }
       UnificationInstruction::CheckMeta { skip_system } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.get_subject_fact().unwrap();
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
 
         if *skip_system && match_subject(&fact.meta, &System::CORE_META) {
-          frame.reset();
+          reset_frame = true;
         }
       }
       UnificationInstruction::SkipSubject { subject } => {
         let frame = self.stack.last_mut().unwrap();
-        let fact = frame.get_subject_fact().unwrap();
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
         let direct_match = match_subject(subject, &fact.subject.subject);
         if direct_match {
-          frame.reset();
+          reset_frame = true;
         }
       }
+    }
+
+    let frame = self.stack.last_mut().unwrap();
+    let fact_index = frame
+      .current_investigated_fact
+      .as_ref()
+      .map(|f| f.fact_index)
+      .unwrap_or_default();
+
+    if reset_frame {
+      frame.reset();
     }
 
     if !self.unwind_stack() {
@@ -249,7 +300,7 @@ impl<'a> AbstractMachine<'a> {
     true
   }
 
-  pub fn execute_until_yield(&mut self) -> Option<&'a Fact> {
+  pub fn execute_until_yield(&mut self) -> Option<FoundFact<'a>> {
     if let Some(fact) = self.yielded.pop_front() {
       return Some(fact);
     }
@@ -265,22 +316,21 @@ impl<'a> AbstractMachine<'a> {
 }
 
 impl<'a> Iterator for AbstractMachine<'a> {
-  type Item = &'a Fact;
+  type Item = FoundFact<'a>;
 
   fn next(&mut self) -> Option<Self::Item> {
     self.execute_until_yield()
   }
 }
 
-struct SearchFrame<'a> {
-  variable_bindings: Vec<VariableBinding>,
+pub(crate) struct SearchFrame<'a> {
+  pub(crate) variable_bindings: Vec<VariableBinding>,
   trail: Vec<usize>,
   start_instruction_index: usize,
   current_instruction_index: usize,
   state: FrameState<'a>,
-  maybe_yielded: Vec<&'a Fact>,
-  current_investigated_fact: Option<&'a Fact>,
-  current_investigated_subject_fact: Option<&'a Fact>,
+  maybe_yielded: Vec<FoundFact<'a>>,
+  current_investigated_fact: Option<FoundFact<'a>>,
 }
 
 impl<'a> SearchFrame<'a> {
@@ -291,7 +341,11 @@ impl<'a> SearchFrame<'a> {
     variable_count: usize,
   ) -> Self {
     let mut iterator = database.iter_naive_facts();
-    let current_investigated_fact = iterator.next();
+    let current_investigated_fact = iterator.next().map(|(fact_index, fact)| FoundFact {
+      fact,
+      fact_index,
+      subject_binding: None,
+    });
 
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
@@ -301,7 +355,6 @@ impl<'a> SearchFrame<'a> {
       state: FrameState::Static { iterator },
       maybe_yielded: Vec::new(),
       current_investigated_fact,
-      current_investigated_subject_fact: None,
     };
 
     if let Some(previous_frame) = previous_frame {
@@ -327,7 +380,6 @@ impl<'a> SearchFrame<'a> {
       state: FrameState::SubQuery { machine },
       maybe_yielded: Vec::new(),
       current_investigated_fact,
-      current_investigated_subject_fact: None,
     };
 
     if let Some(previous_frame) = previous_frame {
@@ -337,30 +389,32 @@ impl<'a> SearchFrame<'a> {
     me
   }
 
-  pub fn new_subject<'b>(
+  pub fn new_subject_unification(
     mut machine: AbstractMachine<'a>,
     start_instruction_index: usize,
-    previous_frame: Option<&'b SearchFrame<'a>>,
+    previous_frame: Option<&SearchFrame<'a>>,
     variable_count: usize,
+    variable: usize,
   ) -> Self {
+    let current_investigated_fact =
+      previous_frame.and_then(|frame| frame.current_investigated_fact.clone());
+
     machine.follow_evaluated_subjects = false;
-    let subject_fact = machine.next();
 
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
       trail: Vec::new(),
       start_instruction_index,
       current_instruction_index: start_instruction_index,
-      state: FrameState::Subject { machine },
+      state: FrameState::SubjectUnification { machine, variable },
       maybe_yielded: Vec::new(),
-      current_investigated_fact: subject_fact,
-      current_investigated_subject_fact: subject_fact,
+      current_investigated_fact,
     };
 
-    if let Some(fact) = subject_fact {
-      me.variable_bindings[0] = VariableBinding::Bound(fact.subject.subject.clone());
-    } else {
-      me.current_investigated_fact = None;
+    me.reset();
+
+    if let Some(previous_frame) = previous_frame {
+      me.variable_bindings = previous_frame.variable_bindings.clone();
     }
 
     me
@@ -368,51 +422,71 @@ impl<'a> SearchFrame<'a> {
 }
 
 enum FrameState<'a> {
-  Static { iterator: NaiveFactIterator<'a> },
-  SubQuery { machine: AbstractMachine<'a> },
-  Subject { machine: AbstractMachine<'a> },
+  Static {
+    iterator: NaiveFactIterator<'a>,
+  },
+  SubQuery {
+    machine: AbstractMachine<'a>,
+  },
+  SubjectUnification {
+    machine: AbstractMachine<'a>,
+    variable: usize,
+  },
+}
+
+impl<'a> std::fmt::Debug for FrameState<'a> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      FrameState::Static { .. } => f.debug_struct("FrameState::Static").finish(),
+      FrameState::SubQuery { .. } => f.debug_struct("FrameState::SubQuery").finish(),
+      FrameState::SubjectUnification { variable, .. } => f
+        .debug_struct("FrameState::SubjectUnification")
+        .field("variable", variable)
+        .finish(),
+    }
+  }
 }
 
 impl<'a> Iterator for FrameState<'a> {
-  type Item = &'a Fact;
+  type Item = FoundFact<'a>;
 
   fn next(&mut self) -> Option<Self::Item> {
     match self {
-      FrameState::Static { iterator } => iterator.next(),
+      FrameState::Static { iterator } => iterator.next().map(|(fact_index, fact)| FoundFact {
+        fact,
+        fact_index,
+        subject_binding: None,
+      }),
       FrameState::SubQuery { machine } => machine.next(),
-      FrameState::Subject { machine } => machine.next(),
+      FrameState::SubjectUnification { machine, .. } => machine.next(),
     }
   }
 }
 
 impl<'a> SearchFrame<'a> {
-  fn get_subject_fact(&self) -> Option<&'a Fact> {
-    self.current_investigated_fact
-    /*    self
-    .current_investigated_subject_fact
-    .or(self.current_investigated_fact)*/
-  }
-
   fn reset(&mut self) {
     // Advanced iterator
     match &mut self.state {
-      FrameState::Subject { machine } => {
-        let subject_fact = machine.next();
-        if let Some(fact) = subject_fact {
-          self.variable_bindings[0] = VariableBinding::Bound(fact.subject.subject.clone());
-          self.current_investigated_subject_fact = subject_fact;
-          self.current_investigated_fact = subject_fact;
-        } else {
-          // Causes a reset of this frame
-          self.current_investigated_fact = None;
-          self.current_investigated_subject_fact = None;
-        }
-      }
       FrameState::SubQuery { machine } => {
         self.current_investigated_fact = machine.next();
       }
+      FrameState::SubjectUnification { machine, variable } => {
+        if let Some(next_subject_fact) = machine.find(|f| !f.fact.subject.evaluated) {
+          let subject = next_subject_fact.fact.subject.subject.clone();
+          self.variable_bindings[*variable] = VariableBinding::Bound(subject.clone());
+          let current_fact = self.current_investigated_fact.as_mut().unwrap();
+          current_fact.subject_binding = Some(subject)
+        } else {
+          // Signals that frame can be exhausted.
+          self.current_investigated_fact = None;
+        }
+      }
       FrameState::Static { iterator } => {
-        self.current_investigated_fact = iterator.next();
+        self.current_investigated_fact = iterator.next().map(|(fact_index, fact)| FoundFact {
+          fact,
+          fact_index,
+          subject_binding: None,
+        });
       }
     }
 
@@ -441,49 +515,8 @@ impl<'a> SearchFrame<'a> {
   }
 }
 
-#[derive(Clone)]
-enum VariableBinding {
+#[derive(Clone, Debug)]
+pub(crate) enum VariableBinding {
   Unbound,
   Bound(Subject),
-}
-
-#[derive(Debug)]
-pub enum UnificationInstruction {
-  AllocateFrame {
-    size: usize,
-  },
-
-  MaybeYield,
-  YieldAll,
-
-  CheckSubject {
-    subject: Subject,
-  },
-  CheckProperty {
-    property: Subject,
-  },
-  CheckValue {
-    value: Subject,
-    property: Option<Subject>,
-  },
-  CheckOperator {
-    operator: Subject,
-  },
-  CheckMeta {
-    skip_system: bool,
-  },
-
-  UnifySubject {
-    variable: usize,
-  },
-  UnifyProperty {
-    variable: usize,
-  },
-  UnifyValue {
-    variable: usize,
-  },
-
-  SkipSubject {
-    subject: Subject,
-  },
 }

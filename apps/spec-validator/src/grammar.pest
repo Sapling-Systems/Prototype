@@ -33,8 +33,16 @@ meta_prefix  = { "#" }
 meta_subject = { meta_prefix ~ subject }
 meta_list    = { meta_subject ~ ("," ~ meta_subject)* }
 
+// Subject mapping
+subject_mapping_separator = { ";;" }
+subject_mapping_key       = { "subject" }
+subject_mapping           = { subject_mapping_separator ~ subject_mapping_key ~ "=" ~ subject }
+
+// Explain hint
+explain_hint = { "!explain" }
+
 // Facts - SUBJECT/PROPERTY = VALUE
-fact = { subject_selector ~ operator ~ subject_selector ~ meta_list? }
+fact = { subject_selector ~ operator ~ subject_selector ~ meta_list? ~ subject_mapping? ~ explain_hint? }
 
 // Query syntax
 query_marker    = { ">" }

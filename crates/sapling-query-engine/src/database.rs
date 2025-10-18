@@ -27,8 +27,13 @@ impl Database {
     subject
   }
 
-  pub fn add_fact(&mut self, fact: Fact) {
+  pub fn add_fact(&mut self, fact: Fact) -> usize {
     self.raw.push(fact);
+    self.raw.len() - 1
+  }
+
+  pub fn get_fact(&self, index: usize) -> Option<&Fact> {
+    self.raw.get(index)
   }
 
   pub fn get_query_meta(&self, meta_subject: &Subject) -> QueryMeta {

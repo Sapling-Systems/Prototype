@@ -9,17 +9,22 @@ pub struct NaiveFactIterator<'a> {
 }
 
 impl<'a> Iterator for NaiveFactIterator<'a> {
-  type Item = &'a Fact;
+  type Item = (usize, &'a Fact);
 
   fn next(&mut self) -> Option<Self::Item> {
-    self.database.raw.get(self.current_index).inspect(|_| {
-      self.current_index += 1;
-    })
+    self
+      .database
+      .raw
+      .get(self.current_index)
+      .inspect(|_| {
+        self.current_index += 1;
+      })
+      .map(|f| (self.current_index - 1, f))
   }
 }
 
 impl Database {
-  pub(crate) fn iter_naive_facts<'a>(&'a self) -> NaiveFactIterator<'a> {
+  pub fn iter_naive_facts<'a>(&'a self) -> NaiveFactIterator<'a> {
     NaiveFactIterator {
       database: self,
       current_index: 0,

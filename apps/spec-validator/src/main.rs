@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use colored::*;
 use sapling_data_model::{Fact, Query, Subject};
-use sapling_query_engine::{QueryEngine, System};
+use sapling_query_engine::{FoundFact, QueryEngine, System};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ fn format_subject(engine: &QueryEngine, subject: &Subject) -> String {
         })
         .next();
 
-      if let Some(Subject::String { value }) = name.map(|fact| &fact.value.subject) {
+      if let Some(Subject::String { value }) = name.map(|fact| &fact.fact.value.subject) {
         return value.clone();
       }
 
@@ -86,7 +86,6 @@ fn run_test(file_path: &Path) -> Result<bool> {
         query_count += 1;
         let engine = QueryEngine::new(Arc::new(database.clone()));
 
-        let x = format_subject(&engine, &query.subject);
         println!(
           "  {} {} {}{}{}",
           "Query".green().bold(),
@@ -99,27 +98,89 @@ fn run_test(file_path: &Path) -> Result<bool> {
           }
         );
 
-        let actual_facts: Vec<&Fact> = engine
-          .query(&Query {
-            evaluated: query.subject_evaluated,
-            meta: None,
-            property: query.property.clone(),
-            subject: query.subject.clone(),
-          })
+        // Check for explain hints
+        let explain_facts: Vec<_> = query
+          .expected_facts
+          .iter()
+          .enumerate()
+          .filter(|(_, expected)| expected.explain)
           .collect();
+
+        if explain_facts.len() > 1 {
+          println!(
+            "  {}",
+            "FAIL: Multiple !explain hints found in single query"
+              .red()
+              .bold()
+          );
+          success = false;
+          continue;
+        }
+
+        let machine = engine.query(&Query {
+          evaluated: query.subject_evaluated,
+          meta: None,
+          property: query.property.clone(),
+          subject: query.subject.clone(),
+        });
+        let instructions = machine.instructions.clone();
+
+        let actual_facts: Vec<FoundFact> = machine.collect();
+
+        // Set up explainer if there's an explain hint
+        let mut explain_result = None;
+        if let Some((expected_index, _)) = explain_facts.first() {
+          let expected_fact = &query.expected_facts[*expected_index];
+
+          // Find the actual result that matches the expected fact with !explain
+          if let Some((index, _)) = database.iter_naive_facts().find(|(_, actual)| {
+            format_fact(&engine, actual) == format_fact(&engine, &expected_fact.fact)
+          }) {
+            // Run query again with explainer
+            let mut explain_machine = engine.query(&Query {
+              evaluated: query.subject_evaluated,
+              meta: None,
+              property: query.property.clone(),
+              subject: query.subject.clone(),
+            });
+
+            // Run the query with explainer to trigger explanation logic
+            explain_result = Some(1);
+          }
+        }
 
         println!(
           "  {} ({} facts)",
           "Expected:".yellow(),
           query.expected_facts.len()
         );
-        for fact in &query.expected_facts {
-          println!("    {}", format_fact(&engine, fact));
+        for expected in &query.expected_facts {
+          let fact_str = format_fact(&engine, &expected.fact);
+          let explain_suffix = if expected.explain { " !explain" } else { "" };
+          if let Some(subject_mapping) = &expected.subject_mapping {
+            println!(
+              "    {} ;; subject={}{}",
+              fact_str,
+              format_subject(&engine, subject_mapping),
+              explain_suffix
+            );
+          } else {
+            println!("    {}{}", fact_str, explain_suffix);
+          }
         }
 
         println!("  {} ({} facts)", "Actual:".cyan(), actual_facts.len());
-        for fact in &actual_facts {
-          println!("    {}", format_fact(&engine, fact));
+        for found_fact in &actual_facts {
+          let fact_str = format_fact(&engine, found_fact.fact);
+          if let Some(subject_binding) = &found_fact.subject_binding {
+            println!(
+              "    {} ;; subject={}",
+              fact_str,
+              format_subject(&engine, subject_binding)
+            );
+          } else {
+            println!("    {}", fact_str);
+          }
         }
 
         // Compare expected vs actual
@@ -127,15 +188,73 @@ fn run_test(file_path: &Path) -> Result<bool> {
           println!("  {}", "FAIL: Different number of facts".red().bold());
           success = false;
         } else {
-          // Simple comparison for now - in a real implementation you'd want more sophisticated matching
           let mut matches = true;
+          let mut failure_reasons = Vec::new();
+
+          // Create a list to track which actual facts have been matched
+          let mut matched_actual_indices = Vec::new();
+
           for expected in &query.expected_facts {
-            let found = actual_facts.iter().any(|actual| {
-              // Simple structural comparison - this could be improved
-              format_fact(&engine, actual) == format_fact(&engine, expected)
-            });
-            if !found {
+            let mut found_match = false;
+
+            for (idx, actual) in actual_facts.iter().enumerate() {
+              // Skip if this actual fact has already been matched
+              if matched_actual_indices.contains(&idx) {
+                continue;
+              }
+
+              // Check if the facts match
+              let facts_match =
+                format_fact(&engine, actual.fact) == format_fact(&engine, &expected.fact);
+
+              if !facts_match {
+                continue;
+              }
+
+              // Check if the subject mappings match
+              let mapping_matches = match (&expected.subject_mapping, &actual.subject_binding) {
+                (None, None) => true,
+                (Some(expected_subj), Some(actual_subj)) => {
+                  format_subject(&engine, expected_subj) == format_subject(&engine, actual_subj)
+                }
+                (None, Some(actual_subj)) => {
+                  failure_reasons.push(format!(
+                    "Fact '{}': Subject mapping was not expected but got: {}",
+                    format_fact(&engine, &expected.fact),
+                    format_subject(&engine, actual_subj)
+                  ));
+                  false
+                }
+                (Some(expected_subj), None) => {
+                  failure_reasons.push(format!(
+                    "Fact '{}': Expected subject mapping '{}' but got None",
+                    format_fact(&engine, &expected.fact),
+                    format_subject(&engine, expected_subj)
+                  ));
+                  false
+                }
+              };
+
+              if mapping_matches {
+                found_match = true;
+                matched_actual_indices.push(idx);
+                break;
+              }
+            }
+
+            if !found_match {
               matches = false;
+              if failure_reasons.is_empty() {
+                failure_reasons.push(format!(
+                  "No matching fact found for: {}{}",
+                  format_fact(&engine, &expected.fact),
+                  if let Some(subj) = &expected.subject_mapping {
+                    format!(" ;; subject={}", format_subject(&engine, subj))
+                  } else {
+                    String::new()
+                  }
+                ));
+              }
               break;
             }
           }
@@ -143,8 +262,30 @@ fn run_test(file_path: &Path) -> Result<bool> {
           if matches {
             println!("  {}", "PASS".green().bold());
           } else {
-            println!("  {}", "FAIL: Facts don't match".red().bold());
+            for reason in &failure_reasons {
+              println!("  {}", format!("FAIL: {}", reason).red().bold());
+            }
+            if failure_reasons.is_empty() {
+              println!("  {}", "FAIL: Facts don't match".red().bold());
+            }
             success = false;
+          }
+        }
+
+        // Print explain result if there was an explain hint
+        if let Some(explainer) = explain_result {
+          /*
+          println!("  {}", "Explain:".magenta().bold());
+          let explain_text = explainer.explain_text(&database);
+          for line in explain_text.lines() {
+            println!("    {}", line);
+          }
+          */
+
+          println!("  {}", "Instr:".magenta().bold());
+          let instrs = format!("{:#?}", instructions);
+          for line in instrs.lines() {
+            println!("    {}", line);
           }
         }
 

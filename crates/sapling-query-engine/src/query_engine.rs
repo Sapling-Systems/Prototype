@@ -1,10 +1,9 @@
-use sapling_data_model::{Fact, Query, Subject};
+use sapling_data_model::Query;
 use std::sync::Arc;
 
 use crate::{
-  Database, System,
-  database::match_subject,
-  machine::{AbstractMachine, UnificationInstruction},
+  Database, System, database::match_subject, instructions::UnificationInstruction,
+  machine::AbstractMachine,
 };
 
 pub struct QueryEngine {
@@ -83,15 +82,15 @@ impl QueryEngine {
         .as_ref()
         .map(|property| match_subject(property, &query_fact.property.subject))
         .unwrap_or(true);
-      if yield_facts && expect_property_yield {
-        instructions.push(UnificationInstruction::MaybeYield);
-      }
       instructions.push(UnificationInstruction::CheckOperator {
         operator: System::CORE_OPERATOR_IS,
       });
       instructions.push(UnificationInstruction::UnifySubject {
         variable: subject_variable,
       });
+      if yield_facts && expect_property_yield {
+        instructions.push(UnificationInstruction::MaybeYield);
+      }
       if !match_subject(&query_fact.property.subject, &System::CORE_WILDCARD_SUBJECT) {
         instructions.push(UnificationInstruction::CheckProperty {
           property: query_fact.property.subject.clone(),

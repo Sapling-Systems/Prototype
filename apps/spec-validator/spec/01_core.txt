@@ -177,4 +177,75 @@ notFound/xyz == 999
 
 ?everything/dynamicProperty = 'hello'
 > person1/dynamicProperty
->> ?everything/dynamicProperty = 'hello'
+>> ?everything/dynamicProperty = 'hello' ;; subject=person1
+
+> person2
+>> person2/name = 'Bob'
+>> person2/age = 25
+>> person2/country = country_uk
+>> ?everything/dynamicProperty = 'hello' ;; subject=person2
+
+people_in_euro_countries_dynamic/name == *
+people_in_euro_countries_dynamic/dynamicProperty == 'hello'
+people_in_euro_countries_dynamic/country == ?euro_countries
+
+> ?people_in_euro_countries_dynamic
+>> person1/name = 'Alice'
+>> ?everything/dynamicProperty = 'hello' ;; subject=person1
+>> person1/country = country_de
+>> person3/name = 'Charlie'
+>> ?everything/dynamicProperty = 'hello' ;; subject=person3
+>> person3/country = country_fr
+>> person5/name = 'Eve'
+>> ?everything/dynamicProperty = 'hello' ;; subject=person5
+>> person5/country = country_fr
+>> person6/name = 'Frank'
+>> ?everything/dynamicProperty = 'hello' ;; subject=person6
+>> person6/country = country_de
+
+
+data1/value = 10
+data2/value = 20
+data3/value = 10
+data4/value = 10
+matchDataValue10/value == 10
+
+> ?matchDataValue10
+>> data1/value = 10
+>> data3/value = 10
+>> data4/value = 10
+
+?matchDataValue10/something = 1
+
+> data1
+>> data1/value = 10
+>> ?everything/dynamicProperty = 'hello' ;; subject=data1
+>> ?matchDataValue10/something = 1 ;; subject=data1
+> data2
+>> data2/value = 20
+>> ?everything/dynamicProperty = 'hello' ;; subject=data2
+>> (no results)
+> data3
+>> data3/value = 10
+>> ?everything/dynamicProperty = 'hello' ;; subject=data3
+>> ?matchDataValue10/something = 1 ;; subject=data3
+> data4
+>> data4/value = 10
+>> ?everything/dynamicProperty = 'hello' ;; subject=data4
+>> ?matchDataValue10/something = 1 ;; subject=data4
+
+allWhereSomethingIs1/something == 1
+allWhereSomethingIs1/value == *
+
+> ?allWhereSomethingIs1
+>> ?matchDataValue10/something == 1 ;; subject=data1
+>> data1/value = 10
+>> ?matchDataValue10/something == 1 ;; subject=data3
+>> data3/value = 10 !explain
+>> ?matchDataValue10/something == 1 ;; subject=data4
+>> data4/value = 10
+
+> allWhereSomethingIs1
+>> allWhereSomethingIs1/something == 1
+>> allWhereSomethingIs1/value == *
+>> ?everything/dynamicProperty = 'hello' ;; subject=allWhereSomethingIs1
