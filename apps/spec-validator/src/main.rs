@@ -82,6 +82,9 @@ fn run_test(file_path: &Path) -> Result<bool> {
       TestLine::Fact(fact) => {
         database.add_fact(fact);
       }
+      TestLine::ExplainBlock(_) => {
+        // Explain blocks are ignored in normal spec validation
+      }
       TestLine::Query(query) => {
         query_count += 1;
         let engine = QueryEngine::new(Arc::new(database.clone()));
@@ -133,11 +136,11 @@ fn run_test(file_path: &Path) -> Result<bool> {
           let expected_fact = &query.expected_facts[*expected_index];
 
           // Find the actual result that matches the expected fact with !explain
-          if let Some((index, _)) = database.iter_naive_facts().find(|(_, actual)| {
+          if let Some((_index, _)) = database.iter_naive_facts().find(|(_, actual)| {
             format_fact(&engine, actual) == format_fact(&engine, &expected_fact.fact)
           }) {
             // Run query again with explainer
-            let mut explain_machine = engine.query(&Query {
+            let _explain_machine = engine.query(&Query {
               evaluated: query.subject_evaluated,
               meta: None,
               property: query.property.clone(),
@@ -273,7 +276,7 @@ fn run_test(file_path: &Path) -> Result<bool> {
         }
 
         // Print explain result if there was an explain hint
-        if let Some(explainer) = explain_result {
+        if let Some(_explainer) = explain_result {
           /*
           println!("  {}", "Explain:".magenta().bold());
           let explain_text = explainer.explain_text(&database);
@@ -297,25 +300,107 @@ fn run_test(file_path: &Path) -> Result<bool> {
   Ok(success)
 }
 
-fn main() -> Result<()> {
-  let spec_dir = Path::new("./apps/spec-validator/spec");
+fn run_explain_test(file_path: &Path) -> Result<bool> {
+  let content = fs::read_to_string(file_path)
+    .with_context(|| format!("Failed to read file: {:?}", file_path))?;
 
-  if !spec_dir.exists() {
-    eprintln!("Spec directory not found. Please ensure 'spec' directory exists.");
-    return Ok(());
+  let mut registry = SubjectRegistry::new();
+  let test_case = registry
+    .parse_test_case(&content)
+    .with_context(|| format!("Failed to parse test case: {:?}", file_path))?;
+
+  let mut database = registry.into_database();
+
+  let success = true;
+  let mut explain_count = 0;
+
+  println!(
+    "{}",
+    format!("Running explain test: {:?}", file_path)
+      .blue()
+      .bold()
+  );
+
+  // First pass: add all facts to database
+  for line in &test_case.lines {
+    if let TestLine::Fact(fact) = line {
+      database.add_fact(fact.clone());
+    }
   }
 
+  // Second pass: process explain blocks
+  for line in test_case.lines {
+    match line {
+      TestLine::Fact(_) => {
+        // Already processed in first pass
+      }
+      TestLine::Query(_) => {
+        // Queries are not used in explain validation
+      }
+      TestLine::ExplainBlock(explain_block) => {
+        explain_count += 1;
+        let engine = QueryEngine::new(Arc::new(database.clone()));
+
+        println!(
+          "  {} {} explain for {}",
+          "Explain".green().bold(),
+          explain_count,
+          format_subject(&engine, &explain_block.subject)
+        );
+
+        println!(
+          "  {} ({} lines)",
+          "Expected:".yellow(),
+          explain_block.explain_text.lines().count()
+        );
+        for line in explain_block.explain_text.lines() {
+          println!("    {}", line);
+        }
+
+        // TODO: When explain mechanism is implemented:
+        // 1. Get the actual explain output for the subject
+        // 2. Compare against explain_block.explain_text
+        // 3. Report pass/fail based on match
+
+        println!(
+          "  {}",
+          "INFO: Explain mechanism not yet implemented".yellow()
+        );
+        println!("  {}", "SKIP: Pending implementation".yellow().bold());
+        println!();
+      }
+    }
+  }
+
+  if explain_count == 0 {
+    println!(
+      "  {}",
+      "WARNING: No explain blocks found in test file".yellow()
+    );
+  }
+
+  Ok(success)
+}
+
+fn run_validation_suite(
+  dir_path: &Path,
+  test_runner: fn(&Path) -> Result<bool>,
+) -> Result<(usize, usize)> {
   let mut total_tests = 0;
   let mut passed_tests = 0;
 
-  for entry in fs::read_dir(spec_dir)? {
+  if !dir_path.exists() {
+    return Ok((0, 0));
+  }
+
+  for entry in fs::read_dir(dir_path)? {
     let entry = entry?;
     let path = entry.path();
 
     #[allow(clippy::unnecessary_map_or)]
     if path.is_file() && path.extension().map_or(false, |ext| ext == "txt") {
       total_tests += 1;
-      match run_test(&path) {
+      match test_runner(&path) {
         Ok(true) => {
           passed_tests += 1;
           println!("{}", "✓ PASSED".green().bold());
@@ -331,22 +416,73 @@ fn main() -> Result<()> {
     }
   }
 
+  Ok((total_tests, passed_tests))
+}
+
+fn main() -> Result<()> {
+  let spec_dir = Path::new("./apps/spec-validator/spec");
+  let spec_explain_dir = Path::new("./apps/spec-validator/spec-explain");
+
+  // Run normal spec validation
+  println!("\n{}\n", "=== Running Spec Validation ===".blue().bold());
+  let (total_spec_tests, passed_spec_tests) = run_validation_suite(spec_dir, run_test)?;
+
+  if total_spec_tests == 0 {
+    println!("No spec tests found in {:?}", spec_dir);
+  } else {
+    println!(
+      "\n{}",
+      format!(
+        "Spec Results: {}/{} tests passed",
+        passed_spec_tests, total_spec_tests
+      )
+      .blue()
+      .bold()
+    );
+  }
+
+  // Run explain validation
+  println!("\n{}\n", "=== Running Explain Validation ===".blue().bold());
+  let (total_explain_tests, passed_explain_tests) =
+    run_validation_suite(spec_explain_dir, run_explain_test)?;
+
+  if total_explain_tests == 0 {
+    println!("No explain tests found in {:?}", spec_explain_dir);
+  } else {
+    println!(
+      "\n{}",
+      format!(
+        "Explain Results: {}/{} tests passed",
+        passed_explain_tests, total_explain_tests
+      )
+      .blue()
+      .bold()
+    );
+  }
+
+  // Overall summary
+  let total_tests = total_spec_tests + total_explain_tests;
+  let passed_tests = passed_spec_tests + passed_explain_tests;
+
+  println!("\n{}", "=== Overall Summary ===".blue().bold());
   println!(
-    "\n{}",
-    format!("Results: {}/{} tests passed", passed_tests, total_tests)
+    "{}",
+    format!("Total: {}/{} tests passed", passed_tests, total_tests)
       .blue()
       .bold()
   );
 
-  if passed_tests == total_tests {
-    println!("{}", "All tests passed! 🎉".green().bold());
-  } else {
-    println!(
-      "{}",
-      format!("{} tests failed", total_tests - passed_tests)
-        .red()
-        .bold()
-    );
+  if total_tests > 0 {
+    if passed_tests == total_tests {
+      println!("{}", "All tests passed!".green().bold());
+    } else {
+      println!(
+        "{}",
+        format!("{} tests failed", total_tests - passed_tests)
+          .red()
+          .bold()
+      );
+    }
   }
 
   Ok(())

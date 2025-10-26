@@ -51,6 +51,13 @@ query_line      = { query_marker ~ subject_selector }
 expected_line   = { expected_marker ~ fact }
 expected_empty  = { expected_marker ~ "(no results)" }
 
+// Explain syntax
+explain_marker      =  { "=>" }
+explain_for_keyword =  { "explain for" }
+explain_header      =  { explain_marker ~ explain_for_keyword ~ subject }
+explain_text_line   = @{ (!(NEWLINE ~ explain_marker) ~ !EOI ~ ANY)+ }
+explain_block       =  { explain_header ~ NEWLINE ~ explain_text_line }
+
 // Test structure
-test_line = { fact | query_line | expected_line | expected_empty }
+test_line = { explain_block | fact | query_line | expected_line | expected_empty }
 test_file = { SOI ~ (test_line ~ NEWLINE*)* ~ EOI }

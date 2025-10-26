@@ -25,9 +25,16 @@ pub struct Query {
 }
 
 #[derive(Debug, Clone)]
+pub struct ExplainBlock {
+  pub subject: Subject,
+  pub explain_text: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum TestLine {
   Fact(Fact),
   Query(Query),
+  ExplainBlock(ExplainBlock),
 }
 
 #[derive(Debug, Clone)]
@@ -305,6 +312,43 @@ impl SubjectRegistry {
                             explain,
                           });
                         }
+                      }
+                    }
+                    Rule::explain_block => {
+                      if let Some((subject, evaluated)) = current_query_subject.take() {
+                        lines.push(TestLine::Query(Query {
+                          subject,
+                          subject_evaluated: evaluated,
+                          expected_facts: current_expected_facts,
+                          property: current_query_property.clone(),
+                        }));
+                        current_expected_facts = Vec::new();
+                      }
+
+                      let mut explain_subject = None;
+                      let mut explain_lines = Vec::new();
+
+                      for explain_pair in line_content.into_inner() {
+                        match explain_pair.as_rule() {
+                          Rule::explain_header => {
+                            for header_pair in explain_pair.into_inner() {
+                              if let Rule::subject = header_pair.as_rule() {
+                                explain_subject = Some(self.parse_subject(header_pair)?);
+                              }
+                            }
+                          }
+                          Rule::explain_text_line => {
+                            explain_lines.push(explain_pair.as_str().to_string());
+                          }
+                          _ => {}
+                        }
+                      }
+
+                      if let Some(subject) = explain_subject {
+                        lines.push(TestLine::ExplainBlock(ExplainBlock {
+                          subject,
+                          explain_text: explain_lines.join("\n"),
+                        }));
                       }
                     }
                     _ => {}

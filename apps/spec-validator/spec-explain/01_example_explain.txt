@@ -1,0 +1,45 @@
+query/constraint1 == 123
+query/constraint2 == 456
+
+a/constraint1 = 123
+a/constraint2 = 234
+
+b/constraint1 = 456
+b/constraint2 = 456
+
+c/constraint1 = 123
+c/constraint2 = 456
+
+d/constraint1 = 123
+
+=> explain for c
+  Solving with /constraint1
+    Looking for [0] == c
+    >> c/constraint1 = 123
+    Continue
+
+  Solving with /constraint2
+    Looking for c/constraint2 == 456
+    >> c/constraint2 = 456
+    Continue
+
+=> explain for a
+  Solving with /constraint1
+    Looking for [0] == a
+    >> a/constraint1 = 123
+    Continue, [0] <- a
+
+  Solving with /constraint2
+    Looking for a/constraint2 == 456
+    >> a/constraint2 = 234
+    Failed
+
+=> explain for d
+  Solving with /constraint1
+    Looking for [0] == d
+    >> d/constraint1 = 123
+    Continue, [0] <- d
+
+  Solving with /constraint2
+    Looking for d/constraint2 == 456
+    Failed

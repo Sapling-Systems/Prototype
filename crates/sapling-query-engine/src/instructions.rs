@@ -2,13 +2,16 @@ use sapling_data_model::Subject;
 
 #[derive(Debug, Clone)]
 pub enum UnificationInstruction {
+  // Frame instructions
   AllocateFrame {
     size: usize,
   },
 
+  // Yield instructions
   MaybeYield,
   YieldAll,
 
+  // Check instructions
   CheckSubject {
     subject: Subject,
   },
@@ -26,6 +29,7 @@ pub enum UnificationInstruction {
     skip_system: bool,
   },
 
+  // Unifications instructions
   UnifySubject {
     variable: usize,
   },
@@ -36,6 +40,7 @@ pub enum UnificationInstruction {
     variable: usize,
   },
 
+  // Skip instructions
   SkipSubject {
     subject: Subject,
   },
