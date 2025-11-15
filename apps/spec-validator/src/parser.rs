@@ -13,7 +13,6 @@ pub struct SpecParser;
 pub struct ExpectedFact {
   pub fact: Fact,
   pub subject_mapping: Option<Subject>,
-  pub explain: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -25,16 +24,9 @@ pub struct Query {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExplainBlock {
-  pub subject: Subject,
-  pub explain_text: String,
-}
-
-#[derive(Debug, Clone)]
 pub enum TestLine {
   Fact(Fact),
   Query(Query),
-  ExplainBlock(ExplainBlock),
 }
 
 #[derive(Debug, Clone)]
@@ -161,15 +153,11 @@ impl SubjectRegistry {
     })
   }
 
-  fn parse_fact(
-    &mut self,
-    pair: pest::iterators::Pair<Rule>,
-  ) -> Result<(Fact, Option<Subject>, bool)> {
+  fn parse_fact(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<(Fact, Option<Subject>)> {
     let mut left_selector = None;
     let mut value_selector = None;
     let mut meta_subjects = Vec::new();
     let mut subject_mapping = None;
-    let mut explain = false;
 
     let mut operator = System::CORE_OPERATOR_IS.clone();
 
@@ -205,9 +193,6 @@ impl SubjectRegistry {
               subject_mapping = Some(self.parse_subject(mapping_pair)?);
             }
           }
-        }
-        Rule::explain_hint => {
-          explain = true;
         }
         _ => {}
       }
@@ -252,7 +237,7 @@ impl SubjectRegistry {
       meta,
     };
 
-    Ok((fact, subject_mapping, explain))
+    Ok((fact, subject_mapping))
   }
 
   pub fn parse_test_case(&mut self, input: &str) -> Result<TestCase> {
@@ -281,7 +266,7 @@ impl SubjectRegistry {
                         }));
                         current_expected_facts = Vec::new();
                       }
-                      let (fact, _subject_mapping, _explain) = self.parse_fact(line_content)?;
+                      let (fact, _subject_mapping) = self.parse_fact(line_content)?;
                       lines.push(TestLine::Fact(fact));
                     }
                     Rule::query_line => {
@@ -305,50 +290,12 @@ impl SubjectRegistry {
                     Rule::expected_line => {
                       for expected_pair in line_content.into_inner() {
                         if let Rule::fact = expected_pair.as_rule() {
-                          let (fact, subject_mapping, explain) = self.parse_fact(expected_pair)?;
+                          let (fact, subject_mapping) = self.parse_fact(expected_pair)?;
                           current_expected_facts.push(ExpectedFact {
                             fact,
                             subject_mapping,
-                            explain,
                           });
                         }
-                      }
-                    }
-                    Rule::explain_block => {
-                      if let Some((subject, evaluated)) = current_query_subject.take() {
-                        lines.push(TestLine::Query(Query {
-                          subject,
-                          subject_evaluated: evaluated,
-                          expected_facts: current_expected_facts,
-                          property: current_query_property.clone(),
-                        }));
-                        current_expected_facts = Vec::new();
-                      }
-
-                      let mut explain_subject = None;
-                      let mut explain_lines = Vec::new();
-
-                      for explain_pair in line_content.into_inner() {
-                        match explain_pair.as_rule() {
-                          Rule::explain_header => {
-                            for header_pair in explain_pair.into_inner() {
-                              if let Rule::subject = header_pair.as_rule() {
-                                explain_subject = Some(self.parse_subject(header_pair)?);
-                              }
-                            }
-                          }
-                          Rule::explain_text_line => {
-                            explain_lines.push(explain_pair.as_str().to_string());
-                          }
-                          _ => {}
-                        }
-                      }
-
-                      if let Some(subject) = explain_subject {
-                        lines.push(TestLine::ExplainBlock(ExplainBlock {
-                          subject,
-                          explain_text: explain_lines.join("\n"),
-                        }));
                       }
                     }
                     _ => {}

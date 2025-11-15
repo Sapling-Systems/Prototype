@@ -38,26 +38,18 @@ subject_mapping_separator = { ";;" }
 subject_mapping_key       = { "subject" }
 subject_mapping           = { subject_mapping_separator ~ subject_mapping_key ~ "=" ~ subject }
 
-// Explain hint
-explain_hint = { "!explain" }
-
 // Facts - SUBJECT/PROPERTY = VALUE
-fact = { subject_selector ~ operator ~ subject_selector ~ meta_list? ~ subject_mapping? ~ explain_hint? }
+fact = { subject_selector ~ operator ~ subject_selector ~ meta_list? ~ subject_mapping? }
 
 // Query syntax
-query_marker    = { ">" }
-expected_marker = { ">>" }
-query_line      = { query_marker ~ subject_selector }
-expected_line   = { expected_marker ~ fact }
-expected_empty  = { expected_marker ~ "(no results)" }
-
-// Explain syntax
-explain_marker      =  { "=>" }
-explain_for_keyword =  { "explain for" }
-explain_header      =  { explain_marker ~ explain_for_keyword ~ subject }
-explain_text_line   = @{ (!(NEWLINE ~ explain_marker) ~ !EOI ~ ANY)+ }
-explain_block       =  { explain_header ~ NEWLINE ~ explain_text_line }
+query_marker            = { ">" }
+expected_marker         = { ">>" }
+expected_explain_marker = { "#>" }
+query_line              = { query_marker ~ subject_selector }
+expected_line           = { expected_marker ~ fact }
+expected_empty          = { expected_marker ~ "(no results)" }
+expected_explain_line   = { expected_explain_marker ~ ANY* }
 
 // Test structure
-test_line = { explain_block | fact | query_line | expected_line | expected_empty }
+test_line = { fact | query_line | expected_line | expected_empty | expected_explain_line }
 test_file = { SOI ~ (test_line ~ NEWLINE*)* ~ EOI }

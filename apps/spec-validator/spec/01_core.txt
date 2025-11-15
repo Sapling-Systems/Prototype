@@ -241,7 +241,7 @@ allWhereSomethingIs1/value == *
 >> ?matchDataValue10/something == 1 ;; subject=data1
 >> data1/value = 10
 >> ?matchDataValue10/something == 1 ;; subject=data3
->> data3/value = 10 !explain
+>> data3/value = 10
 >> ?matchDataValue10/something == 1 ;; subject=data4
 >> data4/value = 10
 

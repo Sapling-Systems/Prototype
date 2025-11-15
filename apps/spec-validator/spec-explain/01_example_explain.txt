@@ -12,34 +12,19 @@ c/constraint2 = 456
 
 d/constraint1 = 123
 
-=> explain for c
-  Solving with /constraint1
-    Looking for [0] == c
-    >> c/constraint1 = 123
-    Continue
+explainQuery/query = query
+explainQuery/subject = c
+explainQuery/fact0 = 6
 
-  Solving with /constraint2
-    Looking for c/constraint2 == 456
-    >> c/constraint2 = 456
-    Continue
-
-=> explain for a
-  Solving with /constraint1
-    Looking for [0] == a
-    >> a/constraint1 = 123
-    Continue, [0] <- a
-
-  Solving with /constraint2
-    Looking for a/constraint2 == 456
-    >> a/constraint2 = 234
-    Failed
-
-=> explain for d
-  Solving with /constraint1
-    Looking for [0] == d
-    >> d/constraint1 = 123
-    Continue, [0] <- d
-
-  Solving with /constraint2
-    Looking for d/constraint2 == 456
-    Failed
+> explainQuery
+#> Constraint0: 0 [query/constraint1 == 123]
+#> Constraint1: 1 [query/constraint2 == 456]
+#> Subject: c
+#> Fact0: 6 [c/constraint1 = 123]
+#> Fact0: Subject c == c => PASS
+#> Fact0: Property constraint1 == constraint1 => PASS
+#> Fact0: Value 123 == 123 => PASS
+#> Fact1: 6 [c/constraint2 = 456]
+#> Fact1: Subject c == c => PASS
+#> Fact1: Property constraint2 == constraint2 => PASS
+#> Fact1: Value 456 == 456 => PASS
