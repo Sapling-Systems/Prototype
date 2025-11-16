@@ -1,0 +1,47 @@
+query/constraint1 == 123
+query/constraint2 == 456
+
+a/constraint1 = 123
+a/constraint2 = 234
+
+b/constraint1 = 456
+b/constraint2 = 456
+
+c/constraint1 = 123 @cconstraint1
+c/constraint2 = 456 @cconstraint2
+
+d/constraint1 = 123
+
+explainQuery/query = query
+explainQuery/subject = c
+explainQuery/fact0 = @cconstraint1
+
+> explainQuery
+#> Constraint0: 0 [query/constraint1 == 123]
+#> Constraint1: 1 [query/constraint2 == 456]
+#> Subject: c
+#> Fact0: 25 [c/constraint1 = 123]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject c == c => PASS
+#> Fact0: Property constraint1 == constraint1 => PASS
+#> Fact0: Value 123 == 123 => PASS
+
+explainQuery2/query = query
+explainQuery2/subject = c
+explainQuery2/fact0 = @cconstraint1
+explainQuery2/fact1 = @cconstraint2
+
+> explainQuery2
+#> Constraint0: 0 [query/constraint1 == 123]
+#> Constraint1: 1 [query/constraint2 == 456]
+#> Subject: c
+#> Fact0: 25 [c/constraint1 = 123]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject c == c => PASS
+#> Fact0: Property constraint1 == constraint1 => PASS
+#> Fact0: Value 123 == 123 => PASS
+#> Fact1: 26 [c/constraint2 = 456]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject c == c => PASS
+#> Fact1: Property constraint2 == constraint2 => PASS
+#> Fact1: Value 456 == 456 => PASS

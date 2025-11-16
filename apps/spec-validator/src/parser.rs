@@ -24,9 +24,16 @@ pub struct Query {
 }
 
 #[derive(Debug, Clone)]
+pub struct ExplainQuery {
+  pub subject: Subject,
+  pub expected_lines: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
 pub enum TestLine {
-  Fact(Fact),
+  Fact(Fact, Option<String>), // Fact and optional identifier
   Query(Query),
+  ExplainQuery(ExplainQuery),
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +43,7 @@ pub struct TestCase {
 
 pub struct SubjectRegistry {
   static_subjects: HashMap<String, Subject>,
+  fact_identifiers: HashMap<String, usize>,
   database: Database,
 }
 
@@ -43,6 +51,7 @@ impl SubjectRegistry {
   pub fn new() -> Self {
     Self {
       static_subjects: HashMap::new(),
+      fact_identifiers: HashMap::new(),
       database: Database::new(),
     }
   }
@@ -93,6 +102,14 @@ impl SubjectRegistry {
       Rule::identifier => {
         let name = pair.as_str();
         Ok(self.get_or_create_static_subject(name))
+      }
+      Rule::fact_ref_identifier => {
+        let name = pair.as_str();
+        // Store the fact reference as a string subject for now
+        // It will be resolved later when we have all fact IDs
+        Ok(Subject::String {
+          value: name.to_string(),
+        })
       }
       Rule::integer => {
         let value = pair.as_str().parse::<i64>()?;
@@ -153,11 +170,15 @@ impl SubjectRegistry {
     })
   }
 
-  fn parse_fact(&mut self, pair: pest::iterators::Pair<Rule>) -> Result<(Fact, Option<Subject>)> {
+  fn parse_fact(
+    &mut self,
+    pair: pest::iterators::Pair<Rule>,
+  ) -> Result<(Fact, Option<Subject>, Option<String>)> {
     let mut left_selector = None;
     let mut value_selector = None;
     let mut meta_subjects = Vec::new();
     let mut subject_mapping = None;
+    let mut fact_identifier = None;
 
     let mut operator = System::CORE_OPERATOR_IS.clone();
 
@@ -191,6 +212,15 @@ impl SubjectRegistry {
           for mapping_pair in inner_pair.into_inner() {
             if let Rule::subject = mapping_pair.as_rule() {
               subject_mapping = Some(self.parse_subject(mapping_pair)?);
+            }
+          }
+        }
+        Rule::fact_identifier => {
+          for id_pair in inner_pair.into_inner() {
+            if let Rule::fact_ref_identifier = id_pair.as_rule() {
+              let name = id_pair.as_str();
+              // Remove the @ prefix
+              fact_identifier = Some(name[1..].to_string());
             }
           }
         }
@@ -237,7 +267,7 @@ impl SubjectRegistry {
       meta,
     };
 
-    Ok((fact, subject_mapping))
+    Ok((fact, subject_mapping, fact_identifier))
   }
 
   pub fn parse_test_case(&mut self, input: &str) -> Result<TestCase> {
@@ -247,6 +277,8 @@ impl SubjectRegistry {
     let mut current_query_subject: Option<(Subject, bool)> = None;
     let mut current_query_property: Option<Subject> = None;
     let mut current_expected_facts = Vec::new();
+    let mut current_explain_subject: Option<Subject> = None;
+    let mut current_expected_explain_lines = Vec::new();
 
     for pair in pairs {
       match pair.as_rule() {
@@ -257,6 +289,7 @@ impl SubjectRegistry {
                 for line_content in test_line.into_inner() {
                   match line_content.as_rule() {
                     Rule::fact => {
+                      // Flush any pending queries
                       if let Some((subject, evaluated)) = current_query_subject.take() {
                         lines.push(TestLine::Query(Query {
                           subject,
@@ -266,10 +299,20 @@ impl SubjectRegistry {
                         }));
                         current_expected_facts = Vec::new();
                       }
-                      let (fact, _subject_mapping) = self.parse_fact(line_content)?;
-                      lines.push(TestLine::Fact(fact));
+                      if let Some(explain_subject) = current_explain_subject.take() {
+                        lines.push(TestLine::ExplainQuery(ExplainQuery {
+                          subject: explain_subject,
+                          expected_lines: current_expected_explain_lines,
+                        }));
+                        current_expected_explain_lines = Vec::new();
+                      }
+                      let (fact, _subject_mapping, fact_identifier) =
+                        self.parse_fact(line_content)?;
+
+                      lines.push(TestLine::Fact(fact, fact_identifier));
                     }
                     Rule::query_line => {
+                      // Flush any pending queries
                       if let Some((subject, evaluated)) = current_query_subject.take() {
                         lines.push(TestLine::Query(Query {
                           subject,
@@ -279,6 +322,14 @@ impl SubjectRegistry {
                         }));
                         current_expected_facts = Vec::new();
                       }
+                      if let Some(explain_subject) = current_explain_subject.take() {
+                        lines.push(TestLine::ExplainQuery(ExplainQuery {
+                          subject: explain_subject,
+                          expected_lines: current_expected_explain_lines,
+                        }));
+                        current_expected_explain_lines = Vec::new();
+                      }
+
                       for query_pair in line_content.into_inner() {
                         if let Rule::subject_selector = query_pair.as_rule() {
                           let selector = self.parse_subject_selector(query_pair)?;
@@ -290,13 +341,28 @@ impl SubjectRegistry {
                     Rule::expected_line => {
                       for expected_pair in line_content.into_inner() {
                         if let Rule::fact = expected_pair.as_rule() {
-                          let (fact, subject_mapping) = self.parse_fact(expected_pair)?;
+                          let (fact, subject_mapping, _fact_identifier) =
+                            self.parse_fact(expected_pair)?;
                           current_expected_facts.push(ExpectedFact {
                             fact,
                             subject_mapping,
                           });
                         }
                       }
+                    }
+                    Rule::expected_explain_line => {
+                      // If we have a regular query pending, this is the start of an explain query
+                      // Convert it to an explain query
+                      if let Some((subject, _evaluated)) = current_query_subject.take() {
+                        current_explain_subject = Some(subject);
+                        current_query_property = None;
+                        current_expected_facts.clear();
+                      }
+
+                      // Extract the text after "#>"
+                      let text = line_content.as_str();
+                      let explain_line = text.strip_prefix("#>").unwrap_or(text).trim().to_string();
+                      current_expected_explain_lines.push(explain_line);
                     }
                     _ => {}
                   }
@@ -310,7 +376,7 @@ impl SubjectRegistry {
       }
     }
 
-    // Don't forget the last query if it exists
+    // Flush any remaining queries
     if let Some((subject, evaluated)) = current_query_subject {
       lines.push(TestLine::Query(Query {
         subject,
@@ -319,11 +385,17 @@ impl SubjectRegistry {
         property: current_query_property.clone(),
       }));
     }
+    if let Some(explain_subject) = current_explain_subject {
+      lines.push(TestLine::ExplainQuery(ExplainQuery {
+        subject: explain_subject,
+        expected_lines: current_expected_explain_lines,
+      }));
+    }
 
     Ok(TestCase { lines })
   }
 
-  pub fn into_database(self) -> Database {
-    self.database
+  pub fn into_database(self) -> (Database, HashMap<String, usize>) {
+    (self.database, self.fact_identifiers)
   }
 }

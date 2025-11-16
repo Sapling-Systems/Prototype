@@ -13,6 +13,8 @@ impl System {
   pub const CORE_META_INCLUDE: Subject = Subject::Static { uuid: 5 };
   pub const CORE_WILDCARD_SUBJECT: Subject = Subject::Static { uuid: 6 };
 
+  pub const CORE_SUBJECT_COUNT: usize = 7;
+
   pub(crate) fn install(database: &mut Database) {
     Self::add_core_subject(database, "Core Metadata");
     Self::add_core_subject(database, "=");
@@ -21,6 +23,20 @@ impl System {
     Self::add_core_subject(database, "Meta Entry");
     Self::add_core_subject(database, "Meta Core Included");
     Self::add_core_subject(database, "*");
+  }
+
+  pub(crate) fn get_subject_name(database: &Database, subject: &Subject) -> Option<String> {
+    database
+      .raw
+      .iter()
+      .find(|fact| {
+        match_subject(subject, &fact.subject.subject)
+          && match_subject(&fact.property.subject, &System::CORE_PROPERTY_SUBJECT_NAME)
+      })
+      .and_then(|fact| match &fact.value.subject {
+        Subject::String { value } => Some(value.clone()),
+        _ => None,
+      })
   }
 
   pub(crate) fn add_core_subject(database: &mut Database, name: &'static str) -> Subject {

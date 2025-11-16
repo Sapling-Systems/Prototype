@@ -1,3 +1,5 @@
+use std::path::PrefixComponent;
+
 use sapling_data_model::{Fact, Subject};
 
 use crate::{meta::QueryMeta, system::System};
@@ -36,6 +38,14 @@ impl Database {
     self.raw.get(index)
   }
 
+  pub fn get_fact_mut(&mut self, index: usize) -> Option<&mut Fact> {
+    self.raw.get_mut(index)
+  }
+
+  pub fn facts_mut(&mut self) -> &mut Vec<Fact> {
+    &mut self.raw
+  }
+
   pub fn get_query_meta(&self, meta_subject: &Subject) -> QueryMeta {
     if match_subject(meta_subject, &System::CORE_META_INCLUDE) {
       return QueryMeta {
@@ -51,9 +61,10 @@ impl Database {
     subject: &Subject,
     query_meta: &QueryMeta,
     assignments: bool,
-  ) -> Vec<&Fact> {
+    enforced_precedence: &[usize],
+  ) -> Vec<(usize, usize, &Fact)> {
     let mut results = Vec::new();
-    for fact in &self.raw {
+    for (fact_index, fact) in self.raw.iter().enumerate() {
       if fact.subject.evaluated {
         // TODO: Lookup this subject to figure out if it evaluates to currently looked for subject
         continue;
@@ -74,8 +85,15 @@ impl Database {
         continue;
       }
 
-      results.push(fact);
+      results.push((fact_index, results.len(), fact));
     }
+
+    results.sort_by_key(|&(_, index, _)| {
+      enforced_precedence
+        .iter()
+        .position(|&i| i == index)
+        .unwrap_or(index + 100)
+    });
     results
   }
 }

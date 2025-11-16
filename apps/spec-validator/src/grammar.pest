@@ -12,11 +12,12 @@ boolean = @{ "true" | "false" }
 string = @{ ("\"" ~ (!"\"" ~ ANY)* ~ "\"") | ("'" ~ (!"'" ~ ANY)* ~ "'") }
 
 // Identifiers
-identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+identifier          = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+fact_ref_identifier = @{ "@" ~ identifier }
 
 // Subjects
 wildcard_subject = { "*" }
-subject          = { boolean | float | integer | string | identifier | wildcard_subject }
+subject          = { boolean | float | integer | string | fact_ref_identifier | identifier | wildcard_subject }
 
 // Subject selectors
 evaluated_marker   = { "?" }
@@ -38,8 +39,11 @@ subject_mapping_separator = { ";;" }
 subject_mapping_key       = { "subject" }
 subject_mapping           = { subject_mapping_separator ~ subject_mapping_key ~ "=" ~ subject }
 
+// Fact identifier
+fact_identifier = { fact_ref_identifier }
+
 // Facts - SUBJECT/PROPERTY = VALUE
-fact = { subject_selector ~ operator ~ subject_selector ~ meta_list? ~ subject_mapping? }
+fact = { subject_selector ~ operator ~ subject_selector ~ meta_list? ~ subject_mapping? ~ fact_identifier? }
 
 // Query syntax
 query_marker            = { ">" }
@@ -48,7 +52,7 @@ expected_explain_marker = { "#>" }
 query_line              = { query_marker ~ subject_selector }
 expected_line           = { expected_marker ~ fact }
 expected_empty          = { expected_marker ~ "(no results)" }
-expected_explain_line   = { expected_explain_marker ~ ANY* }
+expected_explain_line   = { expected_explain_marker ~ (ASCII_ALPHA | ASCII_DIGIT | " " | "_" | "=" | "/" | ">" | ":" | "[" | "]")* }
 
 // Test structure
 test_line = { fact | query_line | expected_line | expected_empty | expected_explain_line }

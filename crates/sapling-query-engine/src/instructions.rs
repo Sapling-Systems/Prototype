@@ -1,5 +1,7 @@
 use sapling_data_model::Subject;
 
+use crate::machine::VariableBinding;
+
 #[derive(Debug, Clone)]
 pub enum UnificationInstruction {
   // Frame instructions
@@ -43,5 +45,19 @@ pub enum UnificationInstruction {
   // Skip instructions
   SkipSubject {
     subject: Subject,
+  },
+
+  // Tracing instructions
+  TraceBindVariable {
+    variable: usize,
+    binding: Subject,
+  },
+  TraceStartFact {
+    constraint: usize,
+    fact: usize,
+  },
+  TraceConstraintCreate {
+    constraint: usize,
+    fact_index: usize,
   },
 }

@@ -1,13 +1,221 @@
 use anyhow::{Context, Result};
 use colored::*;
 use sapling_data_model::{Fact, Query, Subject};
-use sapling_query_engine::{FoundFact, QueryEngine, System};
+use sapling_query_engine::{ExplainConstraintEvaluationOutcome, FoundFact, QueryEngine, System};
+use similar::{ChangeTag, TextDiff};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
 mod parser;
 use parser::{SubjectRegistry, TestLine};
+
+fn resolve_fact_references(
+  database: &mut sapling_query_engine::Database,
+  fact_identifiers: &std::collections::HashMap<String, usize>,
+) {
+  // Iterate through all facts and resolve @identifier references
+  for fact in database.facts_mut() {
+    // Helper to resolve a subject if it's a fact reference
+    let resolve_subject = |subject: &Subject| -> Subject {
+      if let Subject::String { value } = subject {
+        if value.starts_with('@') {
+          let identifier = &value[1..];
+          if let Some(&fact_id) = fact_identifiers.get(identifier) {
+            return Subject::Integer {
+              value: fact_id as i64,
+            };
+          }
+        }
+      }
+      subject.clone()
+    };
+
+    // Resolve references in subject selector
+    fact.subject.subject = resolve_subject(&fact.subject.subject);
+    if let Some(property) = &fact.subject.property {
+      fact.subject.property = Some(resolve_subject(property));
+    }
+
+    // Resolve references in property selector
+    fact.property.subject = resolve_subject(&fact.property.subject);
+    if let Some(property) = &fact.property.property {
+      fact.property.property = Some(resolve_subject(property));
+    }
+
+    // Resolve references in operator
+    fact.operator = resolve_subject(&fact.operator);
+
+    // Resolve references in value selector
+    fact.value.subject = resolve_subject(&fact.value.subject);
+    if let Some(property) = &fact.value.property {
+      fact.value.property = Some(resolve_subject(property));
+    }
+
+    // Resolve references in meta
+    fact.meta = resolve_subject(&fact.meta);
+  }
+}
+
+fn print_diff(expected: &[String], actual: &[String]) {
+  let expected_text = expected.join("\n");
+  let actual_text = actual.join("\n");
+
+  let diff = TextDiff::from_lines(&expected_text, &actual_text);
+
+  println!("  {}", "Diff:".magenta().bold());
+
+  for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
+    if idx > 0 {
+      println!("    {}", "---".dimmed());
+    }
+
+    for op in group {
+      for change in diff.iter_changes(op) {
+        let (sign, line) = match change.tag() {
+          ChangeTag::Delete => ('-', change.value().trim_end().red()),
+          ChangeTag::Insert => ('+', change.value().trim_end().green()),
+          ChangeTag::Equal => (' ', change.value().trim_end().normal()),
+        };
+
+        println!("    {} {}", sign, line);
+      }
+    }
+  }
+}
+
+fn format_explain_result(
+  engine: &QueryEngine,
+  database: &sapling_query_engine::Database,
+  result: &sapling_query_engine::ExplainResult,
+) -> Vec<String> {
+  let mut lines = Vec::new();
+
+  // Format constraints
+  for (idx, (constraint_id, fact_id)) in result.constraints.iter().enumerate() {
+    // Get the constraint fact from the database
+    let fact = database.get_fact(*fact_id);
+    if let Some(fact) = fact {
+      let fact_str = format_fact(engine, fact);
+      lines.push(format!(
+        "Constraint{}: {} [{}]",
+        idx, constraint_id, fact_str
+      ));
+    } else {
+      lines.push(format!("Constraint{}: {} [unknown]", idx, constraint_id));
+    }
+  }
+
+  // Format subject
+  if let Some(subject) = &result.subject {
+    lines.push(format!("Subject: {}", format_subject(engine, subject)));
+  }
+
+  // Format fact events
+  use sapling_query_engine::ExplainFactEvent;
+  for event in &result.fact_events {
+    match event {
+      ExplainFactEvent::EvaluatingExpectedFact {
+        constraint_id,
+        fact_id,
+      } => {
+        let fact = database.get_fact(*fact_id);
+        if let Some(fact) = fact {
+          let fact_str = format_fact(engine, fact);
+          lines.push(format!("Fact{}: {} [{}]", constraint_id, fact_id, fact_str));
+        } else {
+          lines.push(format!("Fact{}: {} [unknown]", constraint_id, fact_id));
+        }
+      }
+      ExplainFactEvent::EvaluatingConstraint {
+        constraint_id,
+        outcome,
+        evaluation,
+      } => {
+        use sapling_query_engine::ExplainConstraintEvaluation;
+        match evaluation {
+          ExplainConstraintEvaluation::Subject {
+            target,
+            actual,
+            operator,
+          } => {
+            let outcome = match outcome {
+              ExplainConstraintEvaluationOutcome::Passed => "PASS",
+              ExplainConstraintEvaluationOutcome::Rejected(..) => "REJECTED",
+            };
+            lines.push(format!(
+              "Fact{}: Subject {} {} {} => {}",
+              constraint_id,
+              format_subject(engine, actual),
+              format_subject(engine, operator),
+              format_subject(engine, target),
+              outcome
+            ));
+          }
+          ExplainConstraintEvaluation::Property {
+            target,
+            actual,
+            operator,
+          } => {
+            let outcome = if format_subject(engine, target) == format_subject(engine, actual) {
+              "PASS"
+            } else {
+              "FAIL"
+            };
+            lines.push(format!(
+              "Fact{}: Property {} {} {} => {}",
+              constraint_id,
+              format_subject(engine, actual),
+              format_subject(engine, operator),
+              format_subject(engine, target),
+              outcome
+            ));
+          }
+          ExplainConstraintEvaluation::Operator {
+            target,
+            actual,
+            operator,
+          } => {
+            let outcome = if format_subject(engine, target) == format_subject(engine, actual) {
+              "PASS"
+            } else {
+              "FAIL"
+            };
+            lines.push(format!(
+              "Fact{}: Operator {} {} {} => {}",
+              constraint_id,
+              format_subject(engine, actual),
+              format_subject(engine, operator),
+              format_subject(engine, target),
+              outcome
+            ));
+          }
+          ExplainConstraintEvaluation::Value {
+            target,
+            actual,
+            operator,
+          } => {
+            let outcome = if format_subject(engine, target) == format_subject(engine, actual) {
+              "PASS"
+            } else {
+              "FAIL"
+            };
+            lines.push(format!(
+              "Fact{}: Value {} {} {} => {}",
+              constraint_id,
+              format_subject(engine, actual),
+              format_subject(engine, operator),
+              format_subject(engine, target),
+              outcome
+            ));
+          }
+        }
+      }
+    }
+  }
+
+  lines
+}
 
 fn format_subject(engine: &QueryEngine, subject: &Subject) -> String {
   match subject {
@@ -70,7 +278,7 @@ fn run_test(file_path: &Path) -> Result<bool> {
     .parse_test_case(&content)
     .with_context(|| format!("Failed to parse test case: {:?}", file_path))?;
 
-  let mut database = registry.into_database();
+  let (mut database, mut fact_identifiers) = registry.into_database();
 
   let mut success = true;
   let mut query_count = 0;
@@ -79,10 +287,16 @@ fn run_test(file_path: &Path) -> Result<bool> {
 
   for line in test_case.lines {
     match line {
-      TestLine::Fact(fact) => {
-        database.add_fact(fact);
+      TestLine::Fact(fact, fact_identifier) => {
+        let fact_id = database.add_fact(fact);
+        if let Some(identifier) = fact_identifier {
+          fact_identifiers.insert(identifier, fact_id);
+        }
       }
       TestLine::Query(query) => {
+        // Resolve fact references before running queries
+        resolve_fact_references(&mut database, &fact_identifiers);
+
         query_count += 1;
         let engine = QueryEngine::new(Arc::new(database.clone()));
 
@@ -104,7 +318,6 @@ fn run_test(file_path: &Path) -> Result<bool> {
           property: query.property.clone(),
           subject: query.subject.clone(),
         });
-        let instructions = machine.instructions.clone();
 
         let actual_facts: Vec<FoundFact> = machine.collect();
 
@@ -231,6 +444,93 @@ fn run_test(file_path: &Path) -> Result<bool> {
 
         println!();
       }
+      TestLine::ExplainQuery(_explain_query) => {
+        // Explain queries are ignored in regular tests
+      }
+    }
+  }
+
+  Ok(success)
+}
+
+fn run_explain_test(file_path: &Path) -> Result<bool> {
+  let content = fs::read_to_string(file_path)
+    .with_context(|| format!("Failed to read file: {:?}", file_path))?;
+
+  let mut registry = SubjectRegistry::new();
+  let test_case = registry
+    .parse_test_case(&content)
+    .with_context(|| format!("Failed to parse test case: {:?}", file_path))?;
+
+  let (mut database, mut fact_identifiers) = registry.into_database();
+
+  let mut success = true;
+  let mut explain_count = 0;
+
+  println!(
+    "{}",
+    format!("Running explain test: {:?}", file_path)
+      .blue()
+      .bold()
+  );
+
+  for line in test_case.lines {
+    match line {
+      TestLine::Fact(fact, fact_identifier) => {
+        let fact_id = database.add_fact(fact);
+        if let Some(identifier) = fact_identifier {
+          fact_identifiers.insert(identifier, fact_id);
+        }
+      }
+      TestLine::Query(_query) => {
+        // Regular queries are ignored in explain tests
+      }
+      TestLine::ExplainQuery(explain_query) => {
+        // Resolve fact references before running explain queries
+        resolve_fact_references(&mut database, &fact_identifiers);
+
+        explain_count += 1;
+        let engine = QueryEngine::new(Arc::new(database.clone()));
+
+        println!(
+          "  {} {} {}",
+          "Explain".green().bold(),
+          explain_count,
+          format_subject(&engine, &explain_query.subject),
+        );
+
+        // Call the explain function
+        let explain_result = engine.explain(&explain_query.subject);
+
+        // Format the result into lines
+        let actual_lines = format_explain_result(&engine, &database, &explain_result);
+
+        println!(
+          "  {} ({} lines)",
+          "Expected:".yellow(),
+          explain_query.expected_lines.len()
+        );
+        for line in &explain_query.expected_lines {
+          println!("    {}", line);
+        }
+
+        println!("  {} ({} lines)", "Actual:".cyan(), actual_lines.len());
+        for line in &actual_lines {
+          println!("    {}", line);
+        }
+
+        // Compare expected vs actual
+        if explain_query.expected_lines == actual_lines {
+          println!("  {}", "PASS".green().bold());
+        } else {
+          println!("  {}", "FAIL: Output doesn't match".red().bold());
+          println!();
+          print_diff(&explain_query.expected_lines, &actual_lines);
+          success = false;
+        }
+
+        println!();
+      }
     }
   }
 
@@ -296,9 +596,31 @@ fn main() -> Result<()> {
     );
   }
 
+  // Run explain spec validation
+  println!(
+    "\n{}\n",
+    "=== Running Explain Spec Validation ===".blue().bold()
+  );
+  let (total_explain_tests, passed_explain_tests) =
+    run_validation_suite(spec_explain_dir, run_explain_test)?;
+
+  if total_explain_tests == 0 {
+    println!("No explain spec tests found in {:?}", spec_explain_dir);
+  } else {
+    println!(
+      "\n{}",
+      format!(
+        "Explain Spec Results: {}/{} tests passed",
+        passed_explain_tests, total_explain_tests
+      )
+      .blue()
+      .bold()
+    );
+  }
+
   // Overall summary
-  let total_tests = total_spec_tests;
-  let passed_tests = passed_spec_tests;
+  let total_tests = total_spec_tests + total_explain_tests;
+  let passed_tests = passed_spec_tests + passed_explain_tests;
 
   println!("\n{}", "=== Overall Summary ===".blue().bold());
   println!(

@@ -3,17 +3,42 @@ use std::{collections::VecDeque, fmt::Debug};
 use sapling_data_model::{Fact, Query, Subject};
 
 use crate::{
-  Database, QueryEngine, System, database::match_subject, instructions::UnificationInstruction,
+  Database, ExplainConstraintEvaluation, ExplainFactEvent, ExplainResult, QueryEngine, System,
+  database::match_subject,
+  explain::{ExplainConstraintEvaluationOutcome, ExplainConstraintEvaluationOutcomeReason},
+  instructions::UnificationInstruction,
   iterators::NaiveFactIterator,
 };
 
+macro_rules! tracing_constraint_check {
+  ($self:ident, $frame:ident, $created_trace_event:ident, $variant:ident, $target:ident, $fact_property:expr) => {{
+    if let Some(constraint) = $frame.tracing {
+      $self
+        .explain_result
+        .fact_events
+        .push(ExplainFactEvent::EvaluatingConstraint {
+          constraint_id: constraint,
+          evaluation: ExplainConstraintEvaluation::$variant {
+            target: $target.clone(),
+            actual: $fact_property.clone(),
+            operator: System::CORE_OPERATOR_EQ.clone(),
+          },
+          outcome: ExplainConstraintEvaluationOutcome::Passed,
+        });
+      $created_trace_event = true;
+    }
+  }};
+}
+
 pub struct AbstractMachine<'a> {
   pub instructions: Vec<UnificationInstruction>,
+  fallback_instruction_pointer: usize,
   database: &'a Database,
   query_engine: &'a QueryEngine,
   stack: Vec<SearchFrame<'a>>,
   yielded: VecDeque<FoundFact<'a>>,
   follow_evaluated_subjects: bool,
+  pub explain_result: ExplainResult,
 }
 
 #[derive(Clone)]
@@ -34,8 +59,14 @@ impl<'a> AbstractMachine<'a> {
       database,
       query_engine,
       follow_evaluated_subjects: true,
+      fallback_instruction_pointer: 0,
       yielded: VecDeque::new(),
       stack: Vec::new(),
+      explain_result: ExplainResult {
+        constraints: vec![],
+        subject: None,
+        fact_events: vec![],
+      },
     }
   }
 
@@ -76,10 +107,10 @@ impl<'a> AbstractMachine<'a> {
       .stack
       .last_mut()
       .map(|f| f.current_instruction_index)
-      .unwrap_or(0);
+      .unwrap_or(self.fallback_instruction_pointer);
     if instruction_index >= self.instructions.len() {
       self.exhaust_stack();
-      instruction_index = 1;
+      instruction_index = 1 + self.fallback_instruction_pointer;
     }
 
     if !self.unwind_stack() {
@@ -98,6 +129,7 @@ impl<'a> AbstractMachine<'a> {
       .expect("Out of bounds instruction");
 
     let mut reset_frame = false;
+    let mut created_trace_event = false;
 
     match instruction {
       // Simply allocates a new frame on the stack
@@ -129,6 +161,28 @@ impl<'a> AbstractMachine<'a> {
       UnificationInstruction::UnifySubject { variable } => {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
+
+        let current_variable = frame
+          .variable_bindings
+          .get(*variable)
+          .and_then(|b| {
+            if let VariableBinding::Bound(s) = b {
+              Some(s.clone())
+            } else {
+              None
+            }
+          })
+          .unwrap_or_else(|| fact.subject.subject.clone());
+
+        tracing_constraint_check!(
+          self,
+          frame,
+          created_trace_event,
+          Subject,
+          current_variable,
+          fact.subject.subject
+        );
+
         let direct_match = !fact.subject.evaluated && frame.unify(*variable, &fact.subject.subject);
 
         if direct_match {
@@ -173,6 +227,28 @@ impl<'a> AbstractMachine<'a> {
       UnificationInstruction::UnifyProperty { variable } => {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
+
+        let current_variable = frame
+          .variable_bindings
+          .get(*variable)
+          .and_then(|b| {
+            if let VariableBinding::Bound(s) = b {
+              Some(s.clone())
+            } else {
+              None
+            }
+          })
+          .unwrap_or_else(|| fact.property.subject.clone());
+
+        tracing_constraint_check!(
+          self,
+          frame,
+          created_trace_event,
+          Property,
+          current_variable,
+          fact.property.subject
+        );
+
         if !frame.unify(*variable, &fact.property.subject) {
           reset_frame = true;
         }
@@ -180,6 +256,28 @@ impl<'a> AbstractMachine<'a> {
       UnificationInstruction::UnifyValue { variable } => {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
+
+        let current_variable = frame
+          .variable_bindings
+          .get(*variable)
+          .and_then(|b| {
+            if let VariableBinding::Bound(s) = b {
+              Some(s.clone())
+            } else {
+              None
+            }
+          })
+          .unwrap_or_else(|| fact.value.subject.clone());
+
+        tracing_constraint_check!(
+          self,
+          frame,
+          created_trace_event,
+          Value,
+          current_variable,
+          fact.value.subject
+        );
+
         if !frame.unify(*variable, &fact.value.subject) {
           reset_frame = true;
         }
@@ -189,6 +287,16 @@ impl<'a> AbstractMachine<'a> {
       UnificationInstruction::CheckSubject { subject } => {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
+
+        tracing_constraint_check!(
+          self,
+          frame,
+          created_trace_event,
+          Subject,
+          subject,
+          fact.subject.subject
+        );
+
         let direct_match = match_subject(subject, &fact.subject.subject);
 
         if direct_match {
@@ -219,6 +327,16 @@ impl<'a> AbstractMachine<'a> {
       UnificationInstruction::CheckProperty { property } => {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
+
+        tracing_constraint_check!(
+          self,
+          frame,
+          created_trace_event,
+          Property,
+          property,
+          fact.property.subject
+        );
+
         if !match_subject(property, &fact.property.subject) {
           reset_frame = true;
         }
@@ -226,6 +344,15 @@ impl<'a> AbstractMachine<'a> {
       UnificationInstruction::CheckValue { value, property } => {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
+
+        tracing_constraint_check!(
+          self,
+          frame,
+          created_trace_event,
+          Value,
+          value,
+          fact.value.subject
+        );
 
         let direct_match = match_subject(value, &fact.value.subject);
         let property_match = match (&fact.value.property, property) {
@@ -256,6 +383,16 @@ impl<'a> AbstractMachine<'a> {
       UnificationInstruction::CheckOperator { operator } => {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
+
+        tracing_constraint_check!(
+          self,
+          frame,
+          created_trace_event,
+          Operator,
+          operator,
+          fact.operator
+        );
+
         if !match_subject(operator, &fact.operator) {
           reset_frame = true;
         }
@@ -276,17 +413,52 @@ impl<'a> AbstractMachine<'a> {
           reset_frame = true;
         }
       }
+      // Tracing
+      UnificationInstruction::TraceConstraintCreate {
+        constraint,
+        fact_index,
+      } => {
+        self
+          .explain_result
+          .constraints
+          .push((*constraint, *fact_index));
+        self.fallback_instruction_pointer += 1;
+      }
+      UnificationInstruction::TraceBindVariable { variable, binding } => {
+        if *variable == 0 {
+          self.explain_result.subject = Some(binding.clone());
+        }
+        let frame = self.stack.last_mut().unwrap();
+        frame.variable_bindings[*variable] = VariableBinding::Bound(binding.clone());
+      }
+      UnificationInstruction::TraceStartFact { fact, constraint } => {
+        let frame = self.stack.last_mut().unwrap();
+        if frame.current_investigated_fact.as_ref().unwrap().fact_index == *fact {
+          frame.tracing = Some(*constraint);
+          self
+            .explain_result
+            .fact_events
+            .push(ExplainFactEvent::EvaluatingExpectedFact {
+              constraint_id: *constraint,
+              fact_id: *fact,
+            });
+        }
+      }
     }
 
-    let frame = self.stack.last_mut().unwrap();
-    let fact_index = frame
-      .current_investigated_fact
-      .as_ref()
-      .map(|f| f.fact_index)
-      .unwrap_or_default();
-
-    if reset_frame {
-      frame.reset();
+    if let Some(frame) = self.stack.last_mut() {
+      if reset_frame {
+        if let Some(last_event) = self.explain_result.fact_events.last_mut()
+          && created_trace_event
+        {
+          last_event.update_outcome(ExplainConstraintEvaluationOutcome::Rejected(
+            ExplainConstraintEvaluationOutcomeReason::NotFound,
+          ));
+        }
+        frame.reset();
+      }
+    } else {
+      return true;
     }
 
     if !self.unwind_stack() {
@@ -325,6 +497,7 @@ impl<'a> Iterator for AbstractMachine<'a> {
 
 pub(crate) struct SearchFrame<'a> {
   pub(crate) variable_bindings: Vec<VariableBinding>,
+  tracing: Option<usize>,
   trail: Vec<usize>,
   start_instruction_index: usize,
   current_instruction_index: usize,
@@ -349,6 +522,7 @@ impl<'a> SearchFrame<'a> {
 
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
+      tracing: None,
       trail: Vec::new(),
       start_instruction_index,
       current_instruction_index: start_instruction_index,
@@ -375,6 +549,7 @@ impl<'a> SearchFrame<'a> {
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
       trail: Vec::new(),
+      tracing: None,
       start_instruction_index,
       current_instruction_index: start_instruction_index,
       state: FrameState::SubQuery { machine },
@@ -404,6 +579,7 @@ impl<'a> SearchFrame<'a> {
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
       trail: Vec::new(),
+      tracing: None,
       start_instruction_index,
       current_instruction_index: start_instruction_index,
       state: FrameState::SubjectUnification { machine, variable },
@@ -489,6 +665,9 @@ impl<'a> SearchFrame<'a> {
         });
       }
     }
+
+    // Reset tracing
+    self.tracing = None;
 
     // Reset variable bindings from trail to unbound again
     for index in &self.trail {

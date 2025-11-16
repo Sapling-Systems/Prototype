@@ -7,9 +7,9 @@ Sapling is a programming system focusing on scalability and simplicity. We truly
 
 * **Data first**: In Sapling **everything** is data everything follows the same data model, and with everything we mean everything hence computation / code is included as well.
 * **Immutability**: Mutability is the root of many problems and hence in Sapling data is conceptually never destroyed or modified.
-* **Side effects free**: The only "side effect" allowed is creating new data.
 * **Cognitive scalability**: Whether human or machine, the amount of cognitive load we can handle is limited. Sapling is designed to reduce the required context to the minimum during development.
 * **First class debuggability**: Debugging is just as important as the rest of the programming system. In Sapling all data can be visualized and inspected at any point in time through various tools and interfaces.
+* **Performance is secondary**: We accept that Sapling is very high level and we don't push limitations of hardware on to the design or philosophy of Sapling to make it faster and push performance worries down to the execution engine.
 
 ### Core concept
 
@@ -26,6 +26,8 @@ While there is no pure human readable text representation of a fact, it can repr
 
 person1/name = "Rene Eichhorn"  #PERSONAL_DATA
 person1/age  = 31               #PERSONAL_DATA
+
+query/name == *
 ```
 
 ### Code as data
