@@ -565,15 +565,14 @@ fn run_explain_test(file_path: &Path) -> Result<bool> {
   Ok(success)
 }
 
-fn run_validation_suite(
+fn collect_spec_files(
   dir_path: &Path,
-  test_runner: fn(&Path) -> Result<bool>,
-) -> Result<(usize, usize)> {
-  let mut total_tests = 0;
-  let mut passed_tests = 0;
+) -> Result<(Vec<std::path::PathBuf>, Vec<std::path::PathBuf>)> {
+  let mut all_spec_files = Vec::new();
+  let mut only_files = Vec::new();
 
   if !dir_path.exists() {
-    return Ok((0, 0));
+    return Ok((all_spec_files, only_files));
   }
 
   for entry in fs::read_dir(dir_path)? {
@@ -582,21 +581,79 @@ fn run_validation_suite(
 
     #[allow(clippy::unnecessary_map_or)]
     if path.is_file() && path.extension().map_or(false, |ext| ext == "txt") {
-      total_tests += 1;
-      match test_runner(&path) {
-        Ok(true) => {
-          passed_tests += 1;
-          println!("{}", "✓ PASSED".green().bold());
-        }
-        Ok(false) => {
-          println!("{}", "✗ FAILED".red().bold());
-        }
-        Err(e) => {
-          println!("{}: {:?}", "✗ ERROR".red().bold(), e);
-        }
+      let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+      // Check if this is an .only.txt file
+      if file_name.ends_with(".only.txt") {
+        only_files.push(path.clone());
       }
-      println!("{}", "─".repeat(60));
+
+      all_spec_files.push(path);
     }
+  }
+
+  Ok((all_spec_files, only_files))
+}
+
+fn run_validation_suite(
+  dir_path: &Path,
+  test_runner: fn(&Path) -> Result<bool>,
+  global_only_files: &[std::path::PathBuf],
+) -> Result<(usize, usize)> {
+  let mut total_tests = 0;
+  let mut passed_tests = 0;
+
+  if !dir_path.exists() {
+    return Ok((0, 0));
+  }
+
+  // Collect all .txt files from this directory
+  let (all_spec_files, _local_only_files) = collect_spec_files(dir_path)?;
+
+  // Determine which files to run:
+  // - If there are global .only.txt files, only run those from this directory
+  // - Otherwise, run all files except .skip.txt files
+  let files_to_run: Vec<_> = if !global_only_files.is_empty() {
+    // Only run files from this directory that are in the global only list
+    all_spec_files
+      .into_iter()
+      .filter(|path| global_only_files.contains(path))
+      .collect()
+  } else {
+    // Run all files except .skip.txt files
+    all_spec_files
+      .into_iter()
+      .filter(|path| {
+        let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        !file_name.ends_with(".skip.txt")
+      })
+      .collect()
+  };
+
+  // Run the selected test files
+  for path in files_to_run {
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+    // Skip .skip.txt files (in case they were included via .only.txt logic)
+    if file_name.ends_with(".skip.txt") {
+      println!("{}", format!("Skipping: {:?}", path).yellow());
+      continue;
+    }
+
+    total_tests += 1;
+    match test_runner(&path) {
+      Ok(true) => {
+        passed_tests += 1;
+        println!("{}", "✓ PASSED".green().bold());
+      }
+      Ok(false) => {
+        println!("{}", "✗ FAILED".red().bold());
+      }
+      Err(e) => {
+        println!("{}: {:?}", "✗ ERROR".red().bold(), e);
+      }
+    }
+    println!("{}", "─".repeat(60));
   }
 
   Ok((total_tests, passed_tests))
@@ -606,9 +663,35 @@ fn main() -> Result<()> {
   let spec_dir = Path::new("./apps/spec-validator/spec");
   let spec_explain_dir = Path::new("./apps/spec-validator/spec-explain");
 
+  // Collect .only.txt files globally from both directories
+  let (_spec_files, spec_only_files) = collect_spec_files(spec_dir)?;
+  let (_explain_files, explain_only_files) = collect_spec_files(spec_explain_dir)?;
+
+  let mut global_only_files = Vec::new();
+  global_only_files.extend(spec_only_files);
+  global_only_files.extend(explain_only_files);
+
+  // Print message if .only.txt files were found
+  if !global_only_files.is_empty() {
+    println!(
+      "{}",
+      format!(
+        "\nFound {} .only.txt file(s), running only those and skipping all other tests:\n",
+        global_only_files.len()
+      )
+      .yellow()
+      .bold()
+    );
+    for file in &global_only_files {
+      println!("  - {:?}", file);
+    }
+    println!();
+  }
+
   // Run normal spec validation
   println!("\n{}\n", "=== Running Spec Validation ===".blue().bold());
-  let (total_spec_tests, passed_spec_tests) = run_validation_suite(spec_dir, run_test)?;
+  let (total_spec_tests, passed_spec_tests) =
+    run_validation_suite(spec_dir, run_test, &global_only_files)?;
 
   if total_spec_tests == 0 {
     println!("No spec tests found in {:?}", spec_dir);
@@ -630,7 +713,7 @@ fn main() -> Result<()> {
     "=== Running Explain Spec Validation ===".blue().bold()
   );
   let (total_explain_tests, passed_explain_tests) =
-    run_validation_suite(spec_explain_dir, run_explain_test)?;
+    run_validation_suite(spec_explain_dir, run_explain_test, &global_only_files)?;
 
   if total_explain_tests == 0 {
     println!("No explain spec tests found in {:?}", spec_explain_dir);
