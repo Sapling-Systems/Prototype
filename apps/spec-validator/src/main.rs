@@ -345,6 +345,7 @@ fn run_test(file_path: &Path) -> Result<bool> {
           property: query.property.clone(),
           subject: query.subject.clone(),
         });
+        //println!("Instructions: {:#?}", machine.instructions);
 
         let actual_facts: Vec<FoundFact> = machine.collect();
 
@@ -528,7 +529,6 @@ fn run_explain_test(file_path: &Path) -> Result<bool> {
 
         // Call the explain function
         let explain_result = engine.explain(&explain_query.subject);
-        println!("Instructions: {:#?}", explain_result.instruction);
 
         // Format the result into lines
         let actual_lines = format_explain_result(&engine, &database, &explain_result);

@@ -41,7 +41,7 @@ pub struct AbstractMachine<'a> {
   pub explain_result: ExplainResult,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FoundFact<'a> {
   pub fact: &'a Fact,
   pub fact_index: usize,
@@ -83,9 +83,14 @@ impl<'a> AbstractMachine<'a> {
     true
   }
 
-  fn exhaust_stack(&mut self) {
-    self.stack.truncate(1);
-    self.stack[0].reset();
+  fn exhaust_stack_to_continue(&mut self) {
+    let last_continue_marker = self
+      .stack
+      .iter()
+      .rposition(|frame| frame.continue_marker)
+      .unwrap_or(0);
+    self.stack.truncate(last_continue_marker + 1);
+    self.stack[last_continue_marker].reset();
   }
 
   fn unwind_stack(&mut self) -> bool {
@@ -110,8 +115,12 @@ impl<'a> AbstractMachine<'a> {
       .map(|f| f.current_instruction_index)
       .unwrap_or(self.fallback_instruction_pointer);
     if instruction_index >= self.instructions.len() {
-      self.exhaust_stack();
-      instruction_index = 1 + self.fallback_instruction_pointer;
+      self.exhaust_stack_to_continue();
+      if let Some(frame) = self.stack.last_mut() {
+        instruction_index = frame.start_instruction_index;
+      } else {
+        instruction_index = 1 + self.fallback_instruction_pointer;
+      }
     }
 
     if !self.unwind_stack() {
@@ -140,6 +149,7 @@ impl<'a> AbstractMachine<'a> {
           instruction_index + 1,
           self.stack.last(),
           *size,
+          self.stack.is_empty(),
         );
         self.stack.push(new_frame);
       }
@@ -203,6 +213,7 @@ impl<'a> AbstractMachine<'a> {
               Some(frame),
               64,
               *variable,
+              frame.continue_marker,
             );
             self.stack.push(new_frame);
           } else {
@@ -374,8 +385,9 @@ impl<'a> AbstractMachine<'a> {
           machine.follow_evaluated_subjects = self.follow_evaluated_subjects;
 
           let previous_frame = self.stack.last();
+
           let new_frame =
-            SearchFrame::new_sub_query(machine, instruction_index, previous_frame, 128);
+            SearchFrame::new_sub_query(machine, instruction_index, previous_frame, 128, false);
           self.stack.push(new_frame);
         } else {
           reset_frame = true;
@@ -517,6 +529,7 @@ impl<'a> Iterator for AbstractMachine<'a> {
   }
 }
 
+#[derive(Debug)]
 pub(crate) struct SearchFrame<'a> {
   pub(crate) variable_bindings: Vec<VariableBinding>,
   tracing: Option<usize>,
@@ -526,6 +539,9 @@ pub(crate) struct SearchFrame<'a> {
   state: FrameState<'a>,
   maybe_yielded: Vec<FoundFact<'a>>,
   current_investigated_fact: Option<FoundFact<'a>>,
+  debug: Option<Subject>,
+  database: &'a Database,
+  continue_marker: bool,
 }
 
 impl<'a> SearchFrame<'a> {
@@ -534,6 +550,7 @@ impl<'a> SearchFrame<'a> {
     start_instruction_index: usize,
     previous_frame: Option<&SearchFrame>,
     variable_count: usize,
+    continue_marker: bool,
   ) -> Self {
     let mut iterator = database.iter_naive_facts();
     let current_investigated_fact = iterator.next().map(|(fact_index, fact)| FoundFact {
@@ -544,6 +561,7 @@ impl<'a> SearchFrame<'a> {
 
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
+      database,
       tracing: None,
       trail: Vec::new(),
       start_instruction_index,
@@ -551,6 +569,8 @@ impl<'a> SearchFrame<'a> {
       state: FrameState::Static { iterator },
       maybe_yielded: Vec::new(),
       current_investigated_fact,
+      continue_marker,
+      debug: None,
     };
 
     if let Some(previous_frame) = previous_frame {
@@ -565,14 +585,18 @@ impl<'a> SearchFrame<'a> {
     start_instruction_index: usize,
     previous_frame: Option<&SearchFrame>,
     variable_count: usize,
+    continue_marker: bool,
   ) -> Self {
     let current_investigated_fact = machine.next();
 
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
+      database: machine.database,
       trail: Vec::new(),
       tracing: None,
       start_instruction_index,
+      continue_marker,
+      debug: None,
       current_instruction_index: start_instruction_index,
       state: FrameState::SubQuery { machine },
       maybe_yielded: Vec::new(),
@@ -592,6 +616,7 @@ impl<'a> SearchFrame<'a> {
     previous_frame: Option<&SearchFrame<'a>>,
     variable_count: usize,
     variable: usize,
+    continue_marker: bool,
   ) -> Self {
     let current_investigated_fact =
       previous_frame.and_then(|frame| frame.current_investigated_fact.clone());
@@ -600,20 +625,23 @@ impl<'a> SearchFrame<'a> {
 
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
+      database: machine.database,
       trail: Vec::new(),
       tracing: None,
+      continue_marker,
       start_instruction_index,
       current_instruction_index: start_instruction_index,
+      debug: None,
       state: FrameState::SubjectUnification { machine, variable },
       maybe_yielded: Vec::new(),
       current_investigated_fact,
     };
 
-    me.reset();
-
     if let Some(previous_frame) = previous_frame {
       me.variable_bindings = previous_frame.variable_bindings.clone();
     }
+
+    me.reset();
 
     me
   }
@@ -672,6 +700,7 @@ impl<'a> SearchFrame<'a> {
         if let Some(next_subject_fact) = machine.find(|f| !f.fact.subject.evaluated) {
           let subject = next_subject_fact.fact.subject.subject.clone();
           self.variable_bindings[*variable] = VariableBinding::Bound(subject.clone());
+          self.debug = Some(subject.clone());
           let current_fact = self.current_investigated_fact.as_mut().unwrap();
           current_fact.subject_binding = Some(subject)
         } else {

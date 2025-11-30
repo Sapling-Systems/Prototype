@@ -1,0 +1,38 @@
+people_in_euro_countries/name == *
+people_in_euro_countries/age == *
+people_in_euro_countries/country == ?euro_countries
+deepQuery/person == ?people_in_euro_countries
+deepQuery/a == 1
+evaluatedValue/value = ?deepQuery/a
+evaluatedValue/secret = 123456
+
+data1/value = 10 @data1value
+data2/value = 20
+data3/value = 10
+data4/value = 10
+matchDataValue10/value == 10
+?matchDataValue10/something = 1 @matchDataValue10Something
+
+allWhereSomethingIs1/something == 1
+allWhereSomethingIs1/value == *
+
+explainQuery/query = allWhereSomethingIs1
+explainQuery/subject = data1
+explainQuery/fact0 = @matchDataValue10Something
+explainQuery/fact1 = @data1value
+
+> explainQuery
+#> Constraint0: 0 [allWhereSomethingIs1/something == 1]
+#> Constraint1: 1 [allWhereSomethingIs1/value == *]
+#> Subject: data1
+#> Fact0: 42 [?matchDataValue10/something = 1]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject matchDataValue10 == data1 => PASS
+#> Fact0: Property something == something => PASS
+#> Fact0: Value 1 == 1 => PASS
+#> Fact1: 37 [data1/value = 10]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject data1 == data1 => PASS
+#> Fact1: Property value == value => PASS
+#> Yielded for Fact0: 42 [?matchDataValue10/something = 1] (subject: data1)
+#> Yielded for Fact1: 37 [data1/value = 10]

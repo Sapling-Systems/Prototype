@@ -1,5 +1,3 @@
-use std::path::PrefixComponent;
-
 use sapling_data_model::{Fact, Subject};
 
 use crate::{meta::QueryMeta, system::System};
@@ -88,7 +86,7 @@ impl Database {
       results.push((fact_index, results.len(), fact));
     }
 
-    results.sort_by_key(|&(_, index, _)| {
+    results.sort_unstable_by_key(|&(_, index, _)| {
       enforced_precedence
         .iter()
         .position(|&i| i == index)

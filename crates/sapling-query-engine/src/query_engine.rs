@@ -165,7 +165,12 @@ impl QueryEngine {
     }
     if yield_facts {
       if let Some(explain) = explain {
-        for (constraint, fact_index) in explain.facts.iter() {
+        let mut collection = explain.facts.iter().collect::<Vec<_>>();
+        // Prevent random ordering due to hash map iteration
+        // Only relevant for spec validator to be able to enforce order everywhere else
+        collection.sort_by_key(|(constraint, _)| *constraint);
+
+        for (constraint, fact_index) in collection {
           instructions.push(UnificationInstruction::TraceLogYield {
             constraint: *constraint,
             fact_index: *fact_index,
@@ -185,7 +190,7 @@ impl QueryEngine {
 
   fn explain_raw(&self, explain: &ExplainQuery) -> ExplainResult {
     let mut enforced_fact_precedence = explain.facts.keys().cloned().collect::<Vec<_>>();
-    enforced_fact_precedence.sort();
+    enforced_fact_precedence.sort_unstable();
 
     let instructions = self.build_evaluation_instructions(
       &Query {

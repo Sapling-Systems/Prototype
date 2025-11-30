@@ -39,6 +39,24 @@ impl System {
       })
   }
 
+  pub(crate) fn get_human_readable_fact(database: &Database, fact: &Fact) -> String {
+    format!(
+      "{}{}/{} {} {}",
+      if fact.subject.evaluated { "?" } else { "" },
+      Self::get_subject_name(database, &fact.subject.subject).unwrap_or_default(),
+      Self::get_subject_name(database, &fact.property.subject).unwrap_or_default(),
+      Self::get_subject_name(database, &fact.operator).unwrap_or_default(),
+      match &fact.value.subject {
+        Subject::String { value } => value.clone(),
+        Subject::Float { value } => value.to_string(),
+        Subject::Integer { value } => value.to_string(),
+        Subject::Static { .. } =>
+          Self::get_subject_name(database, &fact.value.subject).unwrap_or_default(),
+        _ => "???".to_string(),
+      }
+    )
+  }
+
   pub(crate) fn add_core_subject(database: &mut Database, name: &'static str) -> Subject {
     let subject = database.new_static_subject();
 

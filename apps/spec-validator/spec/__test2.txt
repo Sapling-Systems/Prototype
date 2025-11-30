@@ -1,0 +1,25 @@
+people_in_euro_countries/name == *
+people_in_euro_countries/age == *
+people_in_euro_countries/country == ?euro_countries
+deepQuery/person == ?people_in_euro_countries
+deepQuery/a == 1
+evaluatedValue/value = ?deepQuery/a
+evaluatedValue/secret = 123456
+
+data1/value = 10
+data2/value = 20
+data3/value = 10
+data4/value = 10
+matchDataValue10/value == 10
+?matchDataValue10/something = 1
+
+allWhereSomethingIs1/something == 1
+allWhereSomethingIs1/value == *
+
+> ?allWhereSomethingIs1
+>> ?matchDataValue10/something = 1 ;; subject=data1
+>> data1/value = 10
+>> ?matchDataValue10/something = 1 ;; subject=data3
+>> data3/value = 10
+>> ?matchDataValue10/something = 1 ;; subject=data4
+>> data4/value = 10
