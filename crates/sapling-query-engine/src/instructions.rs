@@ -60,4 +60,8 @@ pub enum UnificationInstruction {
     constraint: usize,
     fact_index: usize,
   },
+  TraceLogYield {
+    constraint: usize,
+    fact_index: usize,
+  },
 }

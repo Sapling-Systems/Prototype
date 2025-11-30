@@ -55,7 +55,6 @@ impl<'a> AbstractMachine<'a> {
     query_engine: &'a QueryEngine,
   ) -> Self {
     Self {
-      instructions,
       database,
       query_engine,
       follow_evaluated_subjects: true,
@@ -66,7 +65,9 @@ impl<'a> AbstractMachine<'a> {
         constraints: vec![],
         subject: None,
         fact_events: vec![],
+        instruction: instructions.clone(),
       },
+      instructions,
     }
   }
 
@@ -441,6 +442,27 @@ impl<'a> AbstractMachine<'a> {
             .push(ExplainFactEvent::EvaluatingExpectedFact {
               constraint_id: *constraint,
               fact_id: *fact,
+            });
+        }
+      }
+      UnificationInstruction::TraceLogYield {
+        constraint,
+        fact_index,
+      } => {
+        let yielded = self
+          .stack
+          .iter()
+          .flat_map(|frame| frame.maybe_yielded.iter())
+          .find(|yielded| yielded.fact_index == *fact_index);
+
+        if let Some(yielded) = yielded {
+          self
+            .explain_result
+            .fact_events
+            .push(ExplainFactEvent::YieldingFact {
+              constraint_id: *constraint,
+              fact_id: *fact_index,
+              subject_variable: yielded.subject_binding.clone(),
             });
         }
       }

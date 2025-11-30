@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use sapling_data_model::Subject;
 
+use crate::instructions::UnificationInstruction;
+
 #[derive(Debug)]
 pub struct ExplainQuery {
   pub query_subject: Subject,
@@ -14,6 +16,7 @@ pub struct ExplainResult {
   pub constraints: Vec<(usize, usize)>,
   pub subject: Option<Subject>,
   pub fact_events: Vec<ExplainFactEvent>,
+  pub instruction: Vec<UnificationInstruction>,
 }
 
 #[derive(Debug)]
@@ -27,6 +30,11 @@ pub enum ExplainFactEvent {
     evaluation: ExplainConstraintEvaluation,
     outcome: ExplainConstraintEvaluationOutcome,
   },
+  YieldingFact {
+    fact_id: usize,
+    constraint_id: usize,
+    subject_variable: Option<Subject>,
+  },
 }
 
 impl ExplainFactEvent {
@@ -34,6 +42,9 @@ impl ExplainFactEvent {
     match self {
       ExplainFactEvent::EvaluatingExpectedFact { .. } => {
         panic!("Cannot update outcome of an expected fact event");
+      }
+      ExplainFactEvent::YieldingFact { .. } => {
+        panic!("Cannot update outcome of a yielding fact event");
       }
       ExplainFactEvent::EvaluatingConstraint { outcome, .. } => {
         *outcome = new_outcome;

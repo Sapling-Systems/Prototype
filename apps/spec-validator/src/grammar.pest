@@ -52,7 +52,7 @@ expected_explain_marker = { "#>" }
 query_line              = { query_marker ~ subject_selector }
 expected_line           = { expected_marker ~ fact }
 expected_empty          = { expected_marker ~ "(no results)" }
-expected_explain_line   = { expected_explain_marker ~ (ASCII_ALPHA | ASCII_DIGIT | " " | "_" | "=" | "/" | ">" | ":" | "[" | "]")* }
+expected_explain_line   = { expected_explain_marker ~ (ASCII_ALPHA | ASCII_DIGIT | " " | "_" | "=" | "/" | ">" | ":" | "[" | "]" | "*" | "?" | "(" | ")")* }
 
 // Test structure
 test_line = { fact | query_line | expected_line | expected_empty | expected_explain_line }

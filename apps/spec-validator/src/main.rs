@@ -127,6 +127,33 @@ fn format_explain_result(
           lines.push(format!("Fact{}: {} [unknown]", constraint_id, fact_id));
         }
       }
+      ExplainFactEvent::YieldingFact {
+        constraint_id,
+        fact_id,
+        subject_variable,
+      } => {
+        let fact = database.get_fact(*fact_id);
+        if let Some(fact) = fact {
+          let fact_str = format_fact(engine, fact);
+          lines.push(format!(
+            "Yielded for Fact{}: {} [{}]{}",
+            constraint_id,
+            fact_id,
+            fact_str,
+            if let Some(subject_variable) = subject_variable {
+              format!(" (subject: {})", format_subject(engine, subject_variable))
+            } else {
+              String::new()
+            }
+          ));
+        } else {
+          lines.push(format!(
+            "Yielded for Fact{}: {} [unknown]",
+            constraint_id, fact_id
+          ));
+        }
+      }
+
       ExplainFactEvent::EvaluatingConstraint {
         constraint_id,
         outcome,
@@ -501,6 +528,7 @@ fn run_explain_test(file_path: &Path) -> Result<bool> {
 
         // Call the explain function
         let explain_result = engine.explain(&explain_query.subject);
+        println!("Instructions: {:#?}", explain_result.instruction);
 
         // Format the result into lines
         let actual_lines = format_explain_result(&engine, &database, &explain_result);

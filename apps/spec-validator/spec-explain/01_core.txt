@@ -1,8 +1,8 @@
 query/constraint1 == 123
 query/constraint2 == 456
 
-a/constraint1 = 123
-a/constraint2 = 234
+a/constraint1 = 123 @aconstraint1
+a/constraint2 = 234 @aconstraint2
 
 b/constraint1 = 456
 b/constraint2 = 456
@@ -20,7 +20,7 @@ explainQuery/fact0 = @cconstraint1
 #> Constraint0: 0 [query/constraint1 == 123]
 #> Constraint1: 1 [query/constraint2 == 456]
 #> Subject: c
-#> Fact0: 25 [c/constraint1 = 123]
+#> Fact0: 27 [c/constraint1 = 123]
 #> Fact0: Operator = == = => PASS
 #> Fact0: Subject c == c => PASS
 #> Fact0: Property constraint1 == constraint1 => PASS
@@ -35,13 +35,115 @@ explainQuery2/fact1 = @cconstraint2
 #> Constraint0: 0 [query/constraint1 == 123]
 #> Constraint1: 1 [query/constraint2 == 456]
 #> Subject: c
-#> Fact0: 25 [c/constraint1 = 123]
+#> Fact0: 27 [c/constraint1 = 123]
 #> Fact0: Operator = == = => PASS
 #> Fact0: Subject c == c => PASS
 #> Fact0: Property constraint1 == constraint1 => PASS
 #> Fact0: Value 123 == 123 => PASS
-#> Fact1: 26 [c/constraint2 = 456]
+#> Fact1: 28 [c/constraint2 = 456]
 #> Fact1: Operator = == = => PASS
 #> Fact1: Subject c == c => PASS
 #> Fact1: Property constraint2 == constraint2 => PASS
 #> Fact1: Value 456 == 456 => PASS
+
+explainQuery3/query = query
+explainQuery3/subject = a
+explainQuery3/fact0 = @aconstraint1
+
+> explainQuery3
+#> Constraint0: 0 [query/constraint1 == 123]
+#> Constraint1: 1 [query/constraint2 == 456]
+#> Subject: a
+#> Fact0: 23 [a/constraint1 = 123]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject a == a => PASS
+#> Fact0: Property constraint1 == constraint1 => PASS
+#> Fact0: Value 123 == 123 => PASS
+
+explainQuery4/query = query
+explainQuery4/subject = a
+explainQuery4/fact0 = @aconstraint1
+explainQuery4/fact1 = @aconstraint2
+
+> explainQuery4
+#> Constraint0: 0 [query/constraint1 == 123]
+#> Constraint1: 1 [query/constraint2 == 456]
+#> Subject: a
+#> Fact0: 23 [a/constraint1 = 123]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject a == a => PASS
+#> Fact0: Property constraint1 == constraint1 => PASS
+#> Fact0: Value 123 == 123 => PASS
+#> Fact1: 24 [a/constraint2 = 234]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject a == a => PASS
+#> Fact1: Property constraint2 == constraint2 => PASS
+#> Fact1: Value 234 == 456 => FAIL
+
+
+data1/value = 10 @data1value
+data2/value = 20
+data3/value = 10 @data3value
+data4/value = 10
+matchDataValue10/value == 10
+?matchDataValue10/something = 1 @matchValue10Something
+
+allWhereSomethingIs1/something == 1
+allWhereSomethingIs1/value == *
+
+explainQuery5/query = allWhereSomethingIs1
+> explainQuery5
+#> Constraint0: 0 [allWhereSomethingIs1/something == 1]
+#> Constraint1: 1 [allWhereSomethingIs1/value == *]
+
+explainQuery6/query = allWhereSomethingIs1
+explainQuery6/subject = data3
+explainQuery6/fact1 = @data3value
+> explainQuery6
+#> Constraint0: 1 [allWhereSomethingIs1/value == *]
+#> Constraint1: 0 [allWhereSomethingIs1/something == 1]
+#> Subject: data3
+#> Fact1: 57 [data3/value = 10]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject data3 == data3 => PASS
+#> Fact1: Property value == value => PASS
+
+explainQuery7/query = allWhereSomethingIs1
+explainQuery7/subject = data3
+explainQuery7/fact1 = @data3value
+explainQuery7/fact0 = @matchValue10Something
+> explainQuery7
+#> Constraint0: 0 [allWhereSomethingIs1/something == 1]
+#> Constraint1: 1 [allWhereSomethingIs1/value == *]
+#> Subject: data3
+#> Fact0: 61 [?matchDataValue10/something = 1]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject matchDataValue10 == data3 => PASS
+#> Fact0: Property something == something => PASS
+#> Fact0: Value 1 == 1 => PASS
+#> Fact1: 58 [data3/value = 10]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject data3 == data3 => PASS
+#> Fact1: Property value == value => PASS
+#> Yielded for Fact1: 58 [data3/value = 10]
+#> Yielded for Fact0: 61 [?matchDataValue10/something = 1] (subject: data3)
+
+explainQuery8/query = allWhereSomethingIs1
+explainQuery8/subject = data1
+explainQuery8/fact1 = @data1value
+explainQuery8/fact0 = @matchValue10Something
+> explainQuery8
+#> Constraint0: 0 [allWhereSomethingIs1/something == 1]
+#> Constraint1: 1 [allWhereSomethingIs1/value == *]
+#> Subject: data1
+#> Fact0: 61 [?matchDataValue10/something = 1]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject matchDataValue10 == data1 => PASS
+#> Fact0: Property something == something => PASS
+#> Fact0: Value 1 == 1 => PASS
+#> Fact1: 56 [data1/value = 10]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject data1 == data1 => PASS
+#> Fact1: Property value == value => PASS
+#> Yielded for Fact1: 56 [data1/value = 10]
+#> Yielded for Fact0: 61 [?matchDataValue10/something = 1] (subject: data1)

@@ -164,6 +164,14 @@ impl QueryEngine {
       }
     }
     if yield_facts {
+      if let Some(explain) = explain {
+        for (constraint, fact_index) in explain.facts.iter() {
+          instructions.push(UnificationInstruction::TraceLogYield {
+            constraint: *constraint,
+            fact_index: *fact_index,
+          })
+        }
+      }
       instructions.push(UnificationInstruction::YieldAll);
     }
 
