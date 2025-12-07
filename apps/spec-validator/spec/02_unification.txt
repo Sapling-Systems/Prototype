@@ -1,0 +1,27 @@
+data1/a = 1
+data1/b = 2
+
+data2/a = 1
+data2/b = 4
+
+data3/a = 2
+data3/b = 2
+
+data4/a = 4
+data4/b = 2
+
+data5/a = 1
+data5/b = 1
+
+data6/a = 6
+data6/b = 4
+
+someA/a == ?value
+
+> ?someA
+>> data1/a = 1
+>> data2/a = 1
+>> data3/a = 2
+>> data4/a = 4
+>> data5/a = 1
+>> data6/a = 6

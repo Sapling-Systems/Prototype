@@ -26,6 +26,7 @@ impl QueryEngine {
     yield_facts: bool,
     target_facts_precedence: &[usize],
     explain: Option<&ExplainQuery>,
+    skip_empty: bool,
   ) -> Vec<UnificationInstruction> {
     let meta = query
       .meta
@@ -69,6 +70,10 @@ impl QueryEngine {
     let mut instructions = Vec::new();
 
     if target_facts.is_empty() {
+      if skip_empty {
+        return instructions;
+      }
+
       // Yield everything since there are no further restrictions
       instructions.push(UnificationInstruction::AllocateFrame { size: 1 });
       instructions.push(UnificationInstruction::MaybeYield);
@@ -151,6 +156,7 @@ impl QueryEngine {
           false,
           &[],
           None,
+          true,
         );
         instructions.push(UnificationInstruction::UnifyValue {
           variable: subject_variable + 1,
@@ -184,7 +190,7 @@ impl QueryEngine {
   }
 
   pub fn query<'a>(&'a self, query: &Query) -> AbstractMachine<'a> {
-    let instructions = self.build_evaluation_instructions(query, 0, true, &[], None);
+    let instructions = self.build_evaluation_instructions(query, 0, true, &[], None, false);
     AbstractMachine::new(instructions, &self.database, self)
   }
 
@@ -203,6 +209,7 @@ impl QueryEngine {
       true,
       &enforced_fact_precedence,
       Some(explain),
+      false,
     );
 
     let mut machine = AbstractMachine::new(instructions, &self.database, &self);

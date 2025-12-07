@@ -1,7 +1,5 @@
 use sapling_data_model::Subject;
 
-use crate::machine::VariableBinding;
-
 #[derive(Debug, Clone)]
 pub enum UnificationInstruction {
   // Frame instructions

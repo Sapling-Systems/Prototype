@@ -1,4 +1,7 @@
-use std::{collections::VecDeque, fmt::Debug};
+use std::{
+  collections::{HashMap, VecDeque},
+  fmt::Debug,
+};
 
 use sapling_data_model::{Fact, Query, Subject};
 
@@ -532,6 +535,7 @@ impl<'a> Iterator for AbstractMachine<'a> {
 #[derive(Debug)]
 pub(crate) struct SearchFrame<'a> {
   pub(crate) variable_bindings: Vec<VariableBinding>,
+  subject_bindings: HashMap<u128, VariableBinding>,
   tracing: Option<usize>,
   trail: Vec<usize>,
   start_instruction_index: usize,
@@ -561,6 +565,7 @@ impl<'a> SearchFrame<'a> {
 
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
+      subject_bindings: HashMap::new(),
       database,
       tracing: None,
       trail: Vec::new(),
@@ -575,6 +580,8 @@ impl<'a> SearchFrame<'a> {
 
     if let Some(previous_frame) = previous_frame {
       me.variable_bindings = previous_frame.variable_bindings.clone();
+      me.subject_bindings
+        .extend(previous_frame.subject_bindings.clone());
     }
 
     me
@@ -591,6 +598,7 @@ impl<'a> SearchFrame<'a> {
 
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
+      subject_bindings: HashMap::new(),
       database: machine.database,
       trail: Vec::new(),
       tracing: None,
@@ -605,6 +613,8 @@ impl<'a> SearchFrame<'a> {
 
     if let Some(previous_frame) = previous_frame {
       me.variable_bindings = previous_frame.variable_bindings.clone();
+      me.subject_bindings
+        .extend(previous_frame.subject_bindings.clone());
     }
 
     me
@@ -625,6 +635,7 @@ impl<'a> SearchFrame<'a> {
 
     let mut me = Self {
       variable_bindings: vec![VariableBinding::Unbound; variable_count],
+      subject_bindings: HashMap::new(),
       database: machine.database,
       trail: Vec::new(),
       tracing: None,
@@ -639,6 +650,8 @@ impl<'a> SearchFrame<'a> {
 
     if let Some(previous_frame) = previous_frame {
       me.variable_bindings = previous_frame.variable_bindings.clone();
+      me.subject_bindings
+        .extend(previous_frame.subject_bindings.clone());
     }
 
     me.reset();
