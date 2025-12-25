@@ -1,0 +1,195 @@
+country_de/country = 'germany'
+country_de/currency = 'euro'
+country_pl/country = 'poland'
+country_pl/currency = 'zloty'
+country_uk/country = 'uk'
+country_uk/currency = 'pound'
+country_fr/country = 'france'
+country_fr/currency = 'euro'
+country_xx/currency = 'euro'
+
+person1/name = 'Alice' @person1Name
+person1/age = 30
+person1/country = country_de @person1Country
+person2/name = 'Bob' @person2Name
+person2/age = 25
+person2/country = country_uk @person2Country
+person3/name = 'Charlie' @person3Name
+person3/age = 35
+person3/country = country_fr @person3Country
+person4/name = 'Diana'
+person4/age = 28
+person4/country = country_pl
+person5/name = 'Eve'
+person5/age = 22
+person5/country = country_fr
+person6/name = 'Frank'
+person6/age = 40
+person6/country = country_de
+person7/name = 'Grace'
+person7/age = 27
+person7/country = country_pl
+
+euro_countries/currency == 'euro'
+
+?everything/dynamicProperty = 'hello' @dynamicProperty
+
+people_in_euro_countries_dynamic/name == *
+people_in_euro_countries_dynamic/dynamicProperty == 'hello'
+people_in_euro_countries_dynamic/country == ?euro_countries
+
+explainQuery/query = people_in_euro_countries_dynamic
+explainQuery/subject = person1
+
+> explainQuery
+#> Constraint0: 0 [people_in_euro_countries_dynamic/name == *]
+#> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
+#> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
+#> Subject: person1
+
+explainQuery/fact0 = @person1Name
+
+> explainQuery
+#> Constraint0: 0 [people_in_euro_countries_dynamic/name == *]
+#> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
+#> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
+#> Subject: person1
+#> Fact0: 44 [person1/name = "Alice"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject person1 == person1 => PASS (unification)
+#> Fact0: Property name == name => PASS
+#> Yielded for Fact0: 44 [person1/name = "Alice"]
+
+
+explainQuery/fact1 = @dynamicProperty
+> explainQuery
+#> Constraint0: 0 [people_in_euro_countries_dynamic/name == *]
+#> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
+#> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
+#> Subject: person1
+#> Fact0: 44 [person1/name = "Alice"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject person1 == person1 => PASS (unification)
+#> Fact0: Property name == name => PASS
+#> Fact1: 66 [?everything/dynamicProperty = "hello"]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject everything == person1 => PASS (unification)
+#> Fact1: Property dynamicProperty == dynamicProperty => PASS
+#> Fact1: Value "hello" == "hello" => PASS
+#> Yielded for Fact0: 44 [person1/name = "Alice"]
+#> Yielded for Fact1: 66 [?everything/dynamicProperty = "hello"] (subject: person1)
+
+explainQuery/fact2 = @person1Country
+> explainQuery
+
+#> Constraint0: 0 [people_in_euro_countries_dynamic/name == *]
+#> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
+#> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
+#> Subject: person1
+#> Fact0: 44 [person1/name = "Alice"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject person1 == person1 => PASS (unification)
+#> Fact0: Property name == name => PASS
+#> Fact1: 66 [?everything/dynamicProperty = "hello"]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject everything == person1 => PASS (unification)
+#> Fact1: Property dynamicProperty == dynamicProperty => PASS
+#> Fact1: Value "hello" == "hello" => PASS
+#> Fact2: 46 [person1/country = country_de]
+#> Fact2: Operator = == = => PASS
+#> Fact2: Subject person1 == person1 => PASS (unification)
+#> Fact2: Property country == country => PASS
+#> Fact2: Evaluating SubQuery ?euro_countries yields country_de => PASS
+#> Yielded for Fact0: 44 [person1/name = "Alice"]
+#> Yielded for Fact1: 66 [?everything/dynamicProperty = "hello"] (subject: person1)
+#> Yielded for Fact2: 46 [person1/country = country_de]
+
+
+explainQuery2/query = people_in_euro_countries_dynamic
+explainQuery2/subject = person2
+
+> explainQuery2
+#> Constraint0: 0 [people_in_euro_countries_dynamic/name == *]
+#> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
+#> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
+#> Subject: person2
+
+explainQuery2/fact0 = @person2Name
+
+> explainQuery2
+#> Constraint0: 0 [people_in_euro_countries_dynamic/name == *]
+#> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
+#> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
+#> Subject: person2
+#> Fact0: 47 [person2/name = "Bob"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject person2 == person2 => PASS (unification)
+#> Fact0: Property name == name => PASS
+
+explainQuery2/fact2 = @person2Country
+
+> explainQuery2
+#> Constraint0: 0 [people_in_euro_countries_dynamic/name == *]
+#> Constraint1: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
+#> Constraint2: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
+#> Subject: person2
+#> Fact0: 47 [person2/name = "Bob"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject person2 == person2 => PASS (unification)
+#> Fact0: Property name == name => PASS
+#> Fact2: 49 [person2/country = country_uk]
+#> Fact2: Operator = == = => PASS
+#> Fact2: Subject person2 == person2 => PASS (unification)
+#> Fact2: Property country == country => PASS
+#> Fact2: Evaluating SubQuery ?euro_countries yields country_uk => REJECTED
+
+explainQuery2/fact1 = @dynamicProperty
+
+> explainQuery2
+#> Constraint0: 0 [people_in_euro_countries_dynamic/name == *]
+#> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
+#> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
+#> Subject: person2
+#> Fact0: 47 [person2/name = "Bob"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject person2 == person2 => PASS (unification)
+#> Fact0: Property name == name => PASS
+#> Fact1: 66 [?everything/dynamicProperty = "hello"]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject everything == person2 => PASS (unification)
+#> Fact1: Property dynamicProperty == dynamicProperty => PASS
+#> Fact1: Value "hello" == "hello" => PASS
+#> Fact2: 49 [person2/country = country_uk]
+#> Fact2: Operator = == = => PASS
+#> Fact2: Subject person2 == person2 => PASS (unification)
+#> Fact2: Property country == country => PASS
+#> Fact2: Evaluating SubQuery ?euro_countries yields country_uk => REJECTED
+
+explainQuery3/query = people_in_euro_countries_dynamic
+explainQuery3/subject = person3
+explainQuery3/fact0 = @person3Name
+explainQuery3/fact1 = @dynamicProperty
+explainQuery3/fact2 = @person3Country
+
+> explainQuery3
+#> Constraint0: 0 [people_in_euro_countries_dynamic/name == *]
+#> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
+#> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
+#> Subject: person3
+#> Fact0: 50 [person3/name = "Charlie"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject person3 == person3 => PASS (unification)
+#> Fact0: Property name == name => PASS
+#> Fact1: 66 [?everything/dynamicProperty = "hello"]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject everything == person3 => PASS (unification)
+#> Fact1: Property dynamicProperty == dynamicProperty => PASS
+#> Fact1: Value "hello" == "hello" => PASS
+#> Fact2: 52 [person3/country = country_fr]
+#> Fact2: Operator = == = => PASS
+#> Fact2: Subject person3 == person3 => PASS (unification)
+#> Fact2: Property country == country => PASS
+#> Fact2: Evaluating SubQuery ?euro_countries yields country_fr => PASS
+#> Yielded for Fact0: 50 [person3/name = "Charlie"]
+#> Yielded for Fact1: 66 [?everything/dynamicProperty = "hello"] (subject: person3)
+#> Yielded for Fact2: 52 [person3/country = country_fr]

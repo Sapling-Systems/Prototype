@@ -28,6 +28,13 @@ pub enum ExplainFactEvent {
   EvaluatingConstraint {
     constraint_id: usize,
     evaluation: ExplainConstraintEvaluation,
+    ty: EvaluationType,
+    outcome: ExplainConstraintEvaluationOutcome,
+  },
+  EvaluatingSubQuery {
+    constraint_id: usize,
+    target: Subject,
+    target_query: Subject,
     outcome: ExplainConstraintEvaluationOutcome,
   },
   YieldingFact {
@@ -35,6 +42,12 @@ pub enum ExplainFactEvent {
     constraint_id: usize,
     subject_variable: Option<Subject>,
   },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum EvaluationType {
+  Unification,
+  Check,
 }
 
 impl ExplainFactEvent {
@@ -45,6 +58,9 @@ impl ExplainFactEvent {
       }
       ExplainFactEvent::YieldingFact { .. } => {
         panic!("Cannot update outcome of a yielding fact event");
+      }
+      ExplainFactEvent::EvaluatingSubQuery { outcome, .. } => {
+        *outcome = new_outcome;
       }
       ExplainFactEvent::EvaluatingConstraint { outcome, .. } => {
         *outcome = new_outcome;
@@ -67,22 +83,22 @@ pub enum ExplainConstraintEvaluationOutcomeReason {
 #[derive(Debug)]
 pub enum ExplainConstraintEvaluation {
   Subject {
-    target: Subject,
+    target: Option<Subject>,
     actual: Subject,
     operator: Subject,
   },
   Property {
-    target: Subject,
+    target: Option<Subject>,
     actual: Subject,
     operator: Subject,
   },
   Operator {
-    target: Subject,
+    target: Option<Subject>,
     actual: Subject,
     operator: Subject,
   },
   Value {
-    target: Subject,
+    target: Option<Subject>,
     actual: Subject,
     operator: Subject,
   },

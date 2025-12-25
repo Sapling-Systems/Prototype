@@ -1,0 +1,53 @@
+country_de/country = 'germany'
+country_de/currency = 'euro'
+country_pl/country = 'poland'
+country_pl/currency = 'zloty'
+country_uk/country = 'uk'
+country_uk/currency = 'pound'
+country_fr/country = 'france'
+country_fr/currency = 'euro'
+country_xx/currency = 'euro'
+
+person1/name = 'Alice' @person1Name
+person1/age = 30
+person1/country = country_de @person1Country
+person2/name = 'Bob'
+person2/age = 25
+person2/country = country_uk
+person3/name = 'Charlie'
+person3/age = 35
+person3/country = country_fr
+person4/name = 'Diana'
+person4/age = 28
+person4/country = country_pl
+person5/name = 'Eve'
+person5/age = 22
+person5/country = country_fr
+person6/name = 'Frank'
+person6/age = 40
+person6/country = country_de
+person7/name = 'Grace'
+person7/age = 27
+person7/country = country_pl
+
+euro_countries/currency == 'euro'
+
+?everything/dynamicProperty = 'hello' @dynamicProperty
+
+people_in_euro_countries_dynamic/name == *
+people_in_euro_countries_dynamic/dynamicProperty == 'hello'
+people_in_euro_countries_dynamic/country == ?euro_countries
+
+> ?people_in_euro_countries_dynamic
+>> person1/name = 'Alice'
+>> ?everything/dynamicProperty = 'hello' ;; subject=person1
+>> person1/country = country_de
+>> person3/name = 'Charlie'
+>> ?everything/dynamicProperty = 'hello' ;; subject=person3
+>> person3/country = country_fr
+>> person5/name = 'Eve'
+>> ?everything/dynamicProperty = 'hello' ;; subject=person5
+>> person5/country = country_fr
+>> person6/name = 'Frank'
+>> ?everything/dynamicProperty = 'hello' ;; subject=person6
+>> person6/country = country_de

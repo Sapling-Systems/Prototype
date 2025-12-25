@@ -58,8 +58,17 @@ pub enum UnificationInstruction {
     constraint: usize,
     fact_index: usize,
   },
+  TraceSubQuery {
+    query: Subject,
+    variable: usize,
+  },
   TraceLogYield {
     constraint: usize,
     fact_index: usize,
+  },
+
+  // Debug instructions
+  DebugComment {
+    comment: String,
   },
 }

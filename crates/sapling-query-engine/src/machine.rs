@@ -1,34 +1,37 @@
-use std::{
-  collections::{HashMap, VecDeque},
-  fmt::Debug,
-};
+use std::{collections::VecDeque, fmt::Debug};
 
 use sapling_data_model::{Fact, Query, Subject};
 
 use crate::{
-  Database, ExplainConstraintEvaluation, ExplainFactEvent, ExplainResult, QueryEngine, System,
+  Database, ExplainConstraintEvaluation, ExplainFactEvent, ExplainResult, QueryEngine,
+  SharedVariableAllocator, SharedVariableBank, System,
   database::match_subject,
-  explain::{ExplainConstraintEvaluationOutcome, ExplainConstraintEvaluationOutcomeReason},
+  explain::{
+    EvaluationType, ExplainConstraintEvaluationOutcome, ExplainConstraintEvaluationOutcomeReason,
+  },
   instructions::UnificationInstruction,
   iterators::NaiveFactIterator,
 };
 
 macro_rules! tracing_constraint_check {
-  ($self:ident, $frame:ident, $created_trace_event:ident, $variant:ident, $target:ident, $fact_property:expr) => {{
+  ($self:ident, $frame:ident, $created_trace_event:ident, $variant:ident, $target:expr, $fact_property:expr, $ty:expr) => {{
     if let Some(constraint) = $frame.tracing {
-      $self
-        .explain_result
-        .fact_events
-        .push(ExplainFactEvent::EvaluatingConstraint {
-          constraint_id: constraint,
-          evaluation: ExplainConstraintEvaluation::$variant {
-            target: $target.clone(),
-            actual: $fact_property.clone(),
-            operator: System::CORE_OPERATOR_EQ.clone(),
-          },
-          outcome: ExplainConstraintEvaluationOutcome::Passed,
-        });
-      $created_trace_event = true;
+      if $target.is_some() {
+        $self
+          .explain_result
+          .fact_events
+          .push(ExplainFactEvent::EvaluatingConstraint {
+            constraint_id: constraint,
+            ty: $ty,
+            evaluation: ExplainConstraintEvaluation::$variant {
+              target: $target,
+              actual: $fact_property.clone(),
+              operator: System::CORE_OPERATOR_EQ.clone(),
+            },
+            outcome: ExplainConstraintEvaluationOutcome::Passed,
+          });
+        $created_trace_event = true;
+      }
     }
   }};
 }
@@ -41,6 +44,9 @@ pub struct AbstractMachine<'a> {
   stack: Vec<SearchFrame<'a>>,
   yielded: VecDeque<FoundFact<'a>>,
   follow_evaluated_subjects: bool,
+  variable_bank: SharedVariableBank,
+  variable_allocator: SharedVariableAllocator,
+  pub log_instructions: bool,
   pub explain_result: ExplainResult,
 }
 
@@ -56,6 +62,8 @@ impl<'a> AbstractMachine<'a> {
     instructions: Vec<UnificationInstruction>,
     database: &'a Database,
     query_engine: &'a QueryEngine,
+    variable_bank: SharedVariableBank,
+    variable_allocator: SharedVariableAllocator,
   ) -> Self {
     Self {
       database,
@@ -64,6 +72,7 @@ impl<'a> AbstractMachine<'a> {
       fallback_instruction_pointer: 0,
       yielded: VecDeque::new(),
       stack: Vec::new(),
+      log_instructions: false,
       explain_result: ExplainResult {
         constraints: vec![],
         subject: None,
@@ -71,6 +80,8 @@ impl<'a> AbstractMachine<'a> {
         instruction: instructions.clone(),
       },
       instructions,
+      variable_bank,
+      variable_allocator,
     }
   }
 
@@ -79,9 +90,27 @@ impl<'a> AbstractMachine<'a> {
       return false;
     }
 
-    self.stack.pop();
+    if self.log_instructions {
+      println!("  => Exhausting frame");
+      println!("=============================BEFORE EXHAUST===================");
+      println!("    => stack size: {}", self.stack.len());
+      self.variable_bank.debug_print();
+      println!("=============================================================");
+    }
+    if let Some(mut frame) = self.stack.pop() {
+      frame.before_drop(&self.variable_bank);
+    }
+
     if let Some(frame) = self.stack.last_mut() {
-      frame.reset();
+      frame.reset(&self.variable_bank);
+    }
+
+    if self.log_instructions {
+      println!("  => Exhausting frame");
+      println!("=============================AFTER EXHAUST===================");
+      println!("    => stack size: {}", self.stack.len());
+      self.variable_bank.debug_print();
+      println!("=============================================================");
     }
     true
   }
@@ -92,8 +121,27 @@ impl<'a> AbstractMachine<'a> {
       .iter()
       .rposition(|frame| frame.continue_marker)
       .unwrap_or(0);
-    self.stack.truncate(last_continue_marker + 1);
-    self.stack[last_continue_marker].reset();
+
+    if self.log_instructions {
+      println!("=============================BEFORE===================");
+      println!("    => stack size: {}", self.stack.len());
+      self.variable_bank.debug_print();
+      println!("======================================================");
+    }
+
+    let drained = self.stack.drain((last_continue_marker + 1)..);
+    for mut frame in drained {
+      frame.before_drop(&self.variable_bank);
+    }
+
+    self.stack[last_continue_marker].reset(&self.variable_bank);
+
+    if self.log_instructions {
+      println!("=============================BEFORE===================");
+      println!("    => stack size: {}", self.stack.len());
+      self.variable_bank.debug_print();
+      println!("======================================================");
+    }
   }
 
   fn unwind_stack(&mut self) -> bool {
@@ -118,7 +166,21 @@ impl<'a> AbstractMachine<'a> {
       .map(|f| f.current_instruction_index)
       .unwrap_or(self.fallback_instruction_pointer);
     if instruction_index >= self.instructions.len() {
+      if self.log_instructions {
+        println!("  => EOF, exhaust to continue");
+      }
       self.exhaust_stack_to_continue();
+      if self.log_instructions {
+        println!(
+          "  => 0: {}",
+          self
+            .variable_bank
+            .get(0)
+            .and_then(|x| System::get_subject_name(self.database, &x))
+            .unwrap_or("-".to_string())
+        );
+      }
+
       if let Some(frame) = self.stack.last_mut() {
         instruction_index = frame.start_instruction_index;
       } else {
@@ -144,16 +206,35 @@ impl<'a> AbstractMachine<'a> {
     let mut reset_frame = false;
     let mut created_trace_event = false;
 
+    if self.log_instructions {
+      println!(
+        "Instruction: {:?} with {} and 0: {}",
+        instruction,
+        if let Some(fact) = self
+          .stack
+          .last_mut()
+          .and_then(|frame| frame.current_investigated_fact.as_ref())
+        {
+          System::get_human_readable_fact(self.database, fact.fact)
+        } else {
+          "None".to_string()
+        },
+        self
+          .variable_bank
+          .get(0)
+          .and_then(|x| System::get_subject_name(self.database, &x))
+          .unwrap_or_default()
+      );
+    }
+
     match instruction {
+      UnificationInstruction::DebugComment { .. } => {}
       // Simply allocates a new frame on the stack
       UnificationInstruction::AllocateFrame { size } => {
-        let new_frame = SearchFrame::new_static(
-          self.database,
-          instruction_index + 1,
-          self.stack.last(),
-          *size,
-          self.stack.is_empty(),
-        );
+        self.variable_bank.push_checkpoint();
+
+        let new_frame =
+          SearchFrame::new_static(self.database, instruction_index + 1, self.stack.is_empty());
         self.stack.push(new_frame);
       }
 
@@ -175,18 +256,7 @@ impl<'a> AbstractMachine<'a> {
       UnificationInstruction::UnifySubject { variable } => {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
-
-        let current_variable = frame
-          .variable_bindings
-          .get(*variable)
-          .and_then(|b| {
-            if let VariableBinding::Bound(s) = b {
-              Some(s.clone())
-            } else {
-              None
-            }
-          })
-          .unwrap_or_else(|| fact.subject.subject.clone());
+        let current_variable = self.variable_bank.get(*variable);
 
         tracing_constraint_check!(
           self,
@@ -194,39 +264,49 @@ impl<'a> AbstractMachine<'a> {
           created_trace_event,
           Subject,
           current_variable,
-          fact.subject.subject
+          fact.subject.subject,
+          EvaluationType::Unification
         );
 
-        let direct_match = !fact.subject.evaluated && frame.unify(*variable, &fact.subject.subject);
+        let direct_match =
+          !fact.subject.evaluated && self.variable_bank.unify(*variable, &fact.subject.subject);
 
         if direct_match {
         } else if fact.subject.evaluated && self.follow_evaluated_subjects {
-          let mut machine = self.query_engine.query(&Query {
-            subject: fact.subject.subject.clone(),
-            evaluated: fact.subject.evaluated,
-            meta: None,
-            property: None,
-          });
+          let mut machine = self.query_engine.query(
+            &Query {
+              subject: fact.subject.subject.clone(),
+              evaluated: fact.subject.evaluated,
+              meta: None,
+              property: None,
+            },
+            self.variable_bank.clone(),
+            self.variable_allocator.clone(),
+          );
           machine.follow_evaluated_subjects = false;
 
-          if matches!(frame.variable_bindings[*variable], VariableBinding::Unbound) {
+          if self.variable_bank.get(*variable).is_none() {
             let new_frame = SearchFrame::new_subject_unification(
               machine,
               instruction_index + 1,
               Some(frame),
-              64,
               *variable,
               frame.continue_marker,
+              &self.variable_bank,
             );
             self.stack.push(new_frame);
           } else {
             // If variable is already bound we can simply this to an check instructions and
             // just look if the underlying subject query would yield anything that
             // unifies with the binding
+            let checkpoint_id = self.variable_bank.push_checkpoint();
             let matching_subject = machine.find(|inner_fact| {
-              let unifies = frame.unify(*variable, &inner_fact.fact.subject.subject);
+              let unifies = self
+                .variable_bank
+                .unify(*variable, &inner_fact.fact.subject.subject);
               !inner_fact.fact.subject.evaluated && unifies
             });
+            self.variable_bank.truncate_checkpoint(checkpoint_id);
 
             if let Some(matching_subject) = matching_subject {
               let fact = frame.current_investigated_fact.as_mut().unwrap();
@@ -243,17 +323,7 @@ impl<'a> AbstractMachine<'a> {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
 
-        let current_variable = frame
-          .variable_bindings
-          .get(*variable)
-          .and_then(|b| {
-            if let VariableBinding::Bound(s) = b {
-              Some(s.clone())
-            } else {
-              None
-            }
-          })
-          .unwrap_or_else(|| fact.property.subject.clone());
+        let current_variable = self.variable_bank.get(*variable);
 
         tracing_constraint_check!(
           self,
@@ -261,10 +331,11 @@ impl<'a> AbstractMachine<'a> {
           created_trace_event,
           Property,
           current_variable,
-          fact.property.subject
+          fact.property.subject,
+          EvaluationType::Unification
         );
 
-        if !frame.unify(*variable, &fact.property.subject) {
+        if !self.variable_bank.unify(*variable, &fact.value.subject) {
           reset_frame = true;
         }
       }
@@ -272,17 +343,7 @@ impl<'a> AbstractMachine<'a> {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
 
-        let current_variable = frame
-          .variable_bindings
-          .get(*variable)
-          .and_then(|b| {
-            if let VariableBinding::Bound(s) = b {
-              Some(s.clone())
-            } else {
-              None
-            }
-          })
-          .unwrap_or_else(|| fact.value.subject.clone());
+        let current_variable = self.variable_bank.get(*variable);
 
         tracing_constraint_check!(
           self,
@@ -290,10 +351,11 @@ impl<'a> AbstractMachine<'a> {
           created_trace_event,
           Value,
           current_variable,
-          fact.value.subject
+          fact.value.subject,
+          EvaluationType::Unification
         );
 
-        if !frame.unify(*variable, &fact.value.subject) {
+        if !self.variable_bank.unify(*variable, &fact.value.subject) {
           reset_frame = true;
         }
       }
@@ -308,26 +370,34 @@ impl<'a> AbstractMachine<'a> {
           frame,
           created_trace_event,
           Subject,
-          subject,
-          fact.subject.subject
+          Some(subject.clone()),
+          fact.subject.subject,
+          EvaluationType::Check
         );
 
         let direct_match = match_subject(subject, &fact.subject.subject);
 
         if direct_match {
         } else if fact.subject.evaluated && self.follow_evaluated_subjects {
-          let mut machine = self.query_engine.query(&Query {
-            subject: fact.subject.subject.clone(),
-            evaluated: fact.subject.evaluated,
-            meta: None,
-            property: None,
-          });
+          let checkpoint_id = self.variable_bank.push_checkpoint();
+
+          let mut machine = self.query_engine.query(
+            &Query {
+              subject: fact.subject.subject.clone(),
+              evaluated: fact.subject.evaluated,
+              meta: None,
+              property: None,
+            },
+            self.variable_bank.clone(),
+            self.variable_allocator.clone(),
+          );
           machine.follow_evaluated_subjects = self.follow_evaluated_subjects;
 
           let evalutes_to_expected_subject = machine.any(|inner_fact| {
             !inner_fact.fact.subject.evaluated
               && match_subject(&inner_fact.fact.subject.subject, subject)
           });
+          self.variable_bank.truncate_checkpoint(checkpoint_id);
 
           if !evalutes_to_expected_subject {
             reset_frame = true;
@@ -348,8 +418,9 @@ impl<'a> AbstractMachine<'a> {
           frame,
           created_trace_event,
           Property,
-          property,
-          fact.property.subject
+          Some(property.clone()),
+          fact.property.subject,
+          EvaluationType::Check
         );
 
         if !match_subject(property, &fact.property.subject) {
@@ -365,8 +436,9 @@ impl<'a> AbstractMachine<'a> {
           frame,
           created_trace_event,
           Value,
-          value,
-          fact.value.subject
+          Some(value.clone()),
+          fact.value.subject,
+          EvaluationType::Check
         );
 
         let direct_match = match_subject(value, &fact.value.subject);
@@ -379,18 +451,23 @@ impl<'a> AbstractMachine<'a> {
         // Simple case, we have a direct match of the value as well as property
         if direct_match && property_match {
         } else if fact.value.evaluated || fact.value.property.is_some() {
-          let mut machine = self.query_engine.query(&Query {
-            subject: fact.value.subject.clone(),
-            evaluated: fact.value.evaluated,
-            meta: None,
-            property: fact.value.property.clone(),
-          });
+          let mut machine = self.query_engine.query(
+            &Query {
+              subject: fact.value.subject.clone(),
+              evaluated: fact.value.evaluated,
+              meta: None,
+              property: fact.value.property.clone(),
+            },
+            self.variable_bank.clone(),
+            self.variable_allocator.clone(),
+          );
           machine.follow_evaluated_subjects = self.follow_evaluated_subjects;
 
-          let previous_frame = self.stack.last();
-
-          let new_frame =
-            SearchFrame::new_sub_query(machine, instruction_index, previous_frame, 128, false);
+          println!(
+            "Executing sub-query for fact: {}",
+            System::get_human_readable_fact(self.database, fact)
+          );
+          let new_frame = SearchFrame::new_sub_query(machine, instruction_index, false);
           self.stack.push(new_frame);
         } else {
           reset_frame = true;
@@ -405,8 +482,9 @@ impl<'a> AbstractMachine<'a> {
           frame,
           created_trace_event,
           Operator,
-          operator,
-          fact.operator
+          Some(operator.clone()),
+          fact.operator,
+          EvaluationType::Check
         );
 
         if !match_subject(operator, &fact.operator) {
@@ -444,8 +522,7 @@ impl<'a> AbstractMachine<'a> {
         if *variable == 0 {
           self.explain_result.subject = Some(binding.clone());
         }
-        let frame = self.stack.last_mut().unwrap();
-        frame.variable_bindings[*variable] = VariableBinding::Bound(binding.clone());
+        self.variable_bank.bind(*variable, binding);
       }
       UnificationInstruction::TraceStartFact { fact, constraint } => {
         let frame = self.stack.last_mut().unwrap();
@@ -458,6 +535,22 @@ impl<'a> AbstractMachine<'a> {
               constraint_id: *constraint,
               fact_id: *fact,
             });
+        }
+      }
+      UnificationInstruction::TraceSubQuery { query, variable } => {
+        let frame = self.stack.last_mut().unwrap();
+        if let Some(constraint) = frame.tracing {
+          let variable = self.variable_bank.get(*variable);
+          self
+            .explain_result
+            .fact_events
+            .push(ExplainFactEvent::EvaluatingSubQuery {
+              constraint_id: constraint,
+              target_query: query.clone(),
+              target: variable.unwrap(),
+              outcome: ExplainConstraintEvaluationOutcome::Passed,
+            });
+          frame.waiting_for_subquery_trace = true;
         }
       }
       UnificationInstruction::TraceLogYield {
@@ -486,13 +579,35 @@ impl<'a> AbstractMachine<'a> {
     if let Some(frame) = self.stack.last_mut() {
       if reset_frame {
         if let Some(last_event) = self.explain_result.fact_events.last_mut()
-          && created_trace_event
+          && (created_trace_event || frame.waiting_for_subquery_trace)
         {
           last_event.update_outcome(ExplainConstraintEvaluationOutcome::Rejected(
             ExplainConstraintEvaluationOutcomeReason::NotFound,
           ));
+          frame.waiting_for_subquery_trace = false;
         }
-        frame.reset();
+
+        if self.log_instructions {
+          println!(
+            "  => Resetting frame 0: {}",
+            self
+              .variable_bank
+              .get(0)
+              .and_then(|x| System::get_subject_name(self.database, &x))
+              .unwrap_or("-".to_string())
+          );
+        }
+        frame.reset(&self.variable_bank);
+        if self.log_instructions {
+          println!(
+            "  => Post Resetting frame 0: {}",
+            self
+              .variable_bank
+              .get(0)
+              .and_then(|x| System::get_subject_name(self.database, &x))
+              .unwrap_or("-".to_string())
+          );
+        }
       }
     } else {
       return true;
@@ -534,10 +649,7 @@ impl<'a> Iterator for AbstractMachine<'a> {
 
 #[derive(Debug)]
 pub(crate) struct SearchFrame<'a> {
-  pub(crate) variable_bindings: Vec<VariableBinding>,
-  subject_bindings: HashMap<u128, VariableBinding>,
   tracing: Option<usize>,
-  trail: Vec<usize>,
   start_instruction_index: usize,
   current_instruction_index: usize,
   state: FrameState<'a>,
@@ -546,14 +658,13 @@ pub(crate) struct SearchFrame<'a> {
   debug: Option<Subject>,
   database: &'a Database,
   continue_marker: bool,
+  waiting_for_subquery_trace: bool,
 }
 
 impl<'a> SearchFrame<'a> {
   pub fn new_static(
     database: &'a Database,
     start_instruction_index: usize,
-    previous_frame: Option<&SearchFrame>,
-    variable_count: usize,
     continue_marker: bool,
   ) -> Self {
     let mut iterator = database.iter_naive_facts();
@@ -563,13 +674,11 @@ impl<'a> SearchFrame<'a> {
       subject_binding: None,
     });
 
-    let mut me = Self {
-      variable_bindings: vec![VariableBinding::Unbound; variable_count],
-      subject_bindings: HashMap::new(),
+    let me = Self {
       database,
       tracing: None,
-      trail: Vec::new(),
       start_instruction_index,
+      waiting_for_subquery_trace: false,
       current_instruction_index: start_instruction_index,
       state: FrameState::Static { iterator },
       maybe_yielded: Vec::new(),
@@ -578,44 +687,32 @@ impl<'a> SearchFrame<'a> {
       debug: None,
     };
 
-    if let Some(previous_frame) = previous_frame {
-      me.variable_bindings = previous_frame.variable_bindings.clone();
-      me.subject_bindings
-        .extend(previous_frame.subject_bindings.clone());
-    }
-
     me
   }
 
   pub fn new_sub_query(
     mut machine: AbstractMachine<'a>,
     start_instruction_index: usize,
-    previous_frame: Option<&SearchFrame>,
-    variable_count: usize,
     continue_marker: bool,
   ) -> Self {
+    let bank_checkpoint_id = machine.variable_bank.push_checkpoint();
     let current_investigated_fact = machine.next();
 
-    let mut me = Self {
-      variable_bindings: vec![VariableBinding::Unbound; variable_count],
-      subject_bindings: HashMap::new(),
+    let me = Self {
       database: machine.database,
-      trail: Vec::new(),
       tracing: None,
       start_instruction_index,
+      waiting_for_subquery_trace: false,
       continue_marker,
       debug: None,
       current_instruction_index: start_instruction_index,
-      state: FrameState::SubQuery { machine },
+      state: FrameState::SubQuery {
+        machine,
+        bank_checkpoint_id,
+      },
       maybe_yielded: Vec::new(),
       current_investigated_fact,
     };
-
-    if let Some(previous_frame) = previous_frame {
-      me.variable_bindings = previous_frame.variable_bindings.clone();
-      me.subject_bindings
-        .extend(previous_frame.subject_bindings.clone());
-    }
 
     me
   }
@@ -624,37 +721,34 @@ impl<'a> SearchFrame<'a> {
     mut machine: AbstractMachine<'a>,
     start_instruction_index: usize,
     previous_frame: Option<&SearchFrame<'a>>,
-    variable_count: usize,
     variable: usize,
     continue_marker: bool,
+    bank: &SharedVariableBank,
   ) -> Self {
+    let bank_checkpoint_id = bank.push_checkpoint();
     let current_investigated_fact =
       previous_frame.and_then(|frame| frame.current_investigated_fact.clone());
 
     machine.follow_evaluated_subjects = false;
 
     let mut me = Self {
-      variable_bindings: vec![VariableBinding::Unbound; variable_count],
-      subject_bindings: HashMap::new(),
       database: machine.database,
-      trail: Vec::new(),
       tracing: None,
+      waiting_for_subquery_trace: false,
       continue_marker,
       start_instruction_index,
       current_instruction_index: start_instruction_index,
       debug: None,
-      state: FrameState::SubjectUnification { machine, variable },
+      state: FrameState::SubjectUnification {
+        machine,
+        variable,
+        bank_checkpoint_id,
+      },
       maybe_yielded: Vec::new(),
       current_investigated_fact,
     };
 
-    if let Some(previous_frame) = previous_frame {
-      me.variable_bindings = previous_frame.variable_bindings.clone();
-      me.subject_bindings
-        .extend(previous_frame.subject_bindings.clone());
-    }
-
-    me.reset();
+    me.reset(bank);
 
     me
   }
@@ -666,10 +760,12 @@ enum FrameState<'a> {
   },
   SubQuery {
     machine: AbstractMachine<'a>,
+    bank_checkpoint_id: usize,
   },
   SubjectUnification {
     machine: AbstractMachine<'a>,
     variable: usize,
+    bank_checkpoint_id: usize,
   },
 }
 
@@ -696,24 +792,46 @@ impl<'a> Iterator for FrameState<'a> {
         fact_index,
         subject_binding: None,
       }),
-      FrameState::SubQuery { machine } => machine.next(),
+      FrameState::SubQuery { machine, .. } => machine.next(),
       FrameState::SubjectUnification { machine, .. } => machine.next(),
     }
   }
 }
 
 impl<'a> SearchFrame<'a> {
-  fn reset(&mut self) {
+  fn before_drop(&mut self, bank: &SharedVariableBank) {
+    match self.state {
+      FrameState::Static { .. } => {
+        bank.pop_checkpoint();
+      }
+      FrameState::SubQuery {
+        bank_checkpoint_id, ..
+      } => {
+        bank.truncate_checkpoint(bank_checkpoint_id);
+      }
+      FrameState::SubjectUnification {
+        bank_checkpoint_id,
+        variable,
+        ..
+      } => {
+        bank.truncate_checkpoint(bank_checkpoint_id);
+        bank.unbind(variable);
+      }
+    }
+  }
+
+  fn reset(&mut self, bank: &SharedVariableBank) {
     // Advanced iterator
     match &mut self.state {
-      FrameState::SubQuery { machine } => {
+      FrameState::SubQuery { machine, .. } => {
         self.current_investigated_fact = machine.next();
       }
-      FrameState::SubjectUnification { machine, variable } => {
+      FrameState::SubjectUnification {
+        machine, variable, ..
+      } => {
         if let Some(next_subject_fact) = machine.find(|f| !f.fact.subject.evaluated) {
           let subject = next_subject_fact.fact.subject.subject.clone();
-          self.variable_bindings[*variable] = VariableBinding::Bound(subject.clone());
-          self.debug = Some(subject.clone());
+          bank.bind(*variable, &subject);
           let current_fact = self.current_investigated_fact.as_mut().unwrap();
           current_fact.subject_binding = Some(subject)
         } else {
@@ -727,17 +845,12 @@ impl<'a> SearchFrame<'a> {
           fact_index,
           subject_binding: None,
         });
+        bank.trail_checkpoint();
       }
     }
 
     // Reset tracing
     self.tracing = None;
-
-    // Reset variable bindings from trail to unbound again
-    for index in &self.trail {
-      self.variable_bindings[*index] = VariableBinding::Unbound;
-    }
-    self.trail.clear();
 
     // Reset instruction pointer to the start
     self.current_instruction_index = self.start_instruction_index;
@@ -745,21 +858,4 @@ impl<'a> SearchFrame<'a> {
     // Clear the yield
     self.maybe_yielded.clear();
   }
-
-  fn unify(&mut self, index: usize, subject: &Subject) -> bool {
-    match &self.variable_bindings[index] {
-      VariableBinding::Unbound => {
-        self.variable_bindings[index] = VariableBinding::Bound(subject.clone());
-        self.trail.push(index);
-        true
-      }
-      VariableBinding::Bound(bound_subject) => match_subject(bound_subject, subject),
-    }
-  }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum VariableBinding {
-  Unbound,
-  Bound(Subject),
 }

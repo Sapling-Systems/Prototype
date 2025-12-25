@@ -18,6 +18,9 @@ data6/b = 4
 
 someA/a == ?value
 
+> someA
+>> someA/a == ?value
+
 > ?someA
 >> data1/a = 1
 >> data2/a = 1
@@ -25,3 +28,108 @@ someA/a == ?value
 >> data4/a = 4
 >> data5/a = 1
 >> data6/a = 6
+
+sameAandB/a == ?value
+sameAandB/b == ?value
+
+> sameAandB
+>> sameAandB/a == ?value
+>> sameAandB/b == ?value
+
+> ?sameAandB
+>> data3/a = 2
+>> data3/b = 2
+>> data5/a = 1
+>> data5/b = 1
+
+task1/description = 'Write report'
+task1/estimated_hours = 2
+task1/actual_hours = 2
+
+task2/description = 'Prepare slides'
+task2/estimated_hours = 3
+task2/actual_hours = 4
+
+task3/description = 'Fix bug'
+task3/estimated_hours = 1
+task3/actual_hours = 2
+
+task4/description = 'Code review'
+task4/estimated_hours = 1
+task4/actual_hours = 1
+
+task5/description = 'Team meeting'
+task5/estimated_hours = 2
+task5/actual_hours = 2
+
+person1/name = 'Alice'
+person1/task = task1
+person1/task = task2
+
+person2/name = 'Bob'
+person2/task = task3
+
+person3/name = 'Charlie'
+person3/task = task4
+person3/task = task5
+
+well_estimated_tasks/estimated_hours == ?hours
+well_estimated_tasks/actual_hours == ?hours
+
+> ?well_estimated_tasks
+>> task1/estimated_hours = 2
+>> task1/actual_hours = 2
+>> task4/estimated_hours = 1
+>> task4/actual_hours = 1
+>> task5/estimated_hours = 2
+>> task5/actual_hours = 2
+
+people_with_well_estimated_tasks/name == *
+people_with_well_estimated_tasks/task == ?well_estimated_tasks
+
+> ?people_with_well_estimated_tasks
+>> person1/name = 'Alice'
+>> person1/task = task1
+>> person3/name = 'Charlie'
+>> person3/task = task4
+
+pet1/type = 'dog'
+pet1/age = 3
+pet2/type = 'cat'
+pet2/age = 2
+pet3/type = 'dog'
+pet3/age = 1
+
+owner1/name = 'Alice'
+owner1/prefers = 'dog'
+owner1/pet = pet1
+
+owner2/name = 'Bob'
+owner2/prefers = 'cat'
+owner2/pet = pet2
+
+owner3/name = 'Cara'
+owner3/prefers = 'dog'
+owner3/pet = pet3
+
+pets_by_type/type == ?kind
+
+> ?pets_by_type
+>> pet1/type = 'dog'
+>> pet2/type = 'cat'
+>> pet3/type = 'dog'
+
+owners_with_matching_pets/name == *
+owners_with_matching_pets/prefers == ?kind
+owners_with_matching_pets/pet == ?pets_by_type
+
+> ?owners_with_matching_pets
+>> owner1/name = 'Alice'
+>> owner1/prefers = 'dog'
+>> owner1/pet = pet1
+>> owner2/name = 'Bob'
+>> owner2/prefers = 'cat'
+>> owner2/pet = pet2
+>> owner3/name = 'Cara'
+>> owner3/prefers = 'dog'
+>> owner3/pet = pet3

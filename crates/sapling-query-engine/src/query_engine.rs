@@ -1,13 +1,15 @@
 use sapling_data_model::{Query, Subject};
-use std::{collections::HashMap, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use crate::{
-  Database, System,
+  Database, SharedVariableAllocator, SharedVariableBank, System,
   database::match_subject,
   explain::{ExplainQuery, ExplainResult},
   instructions::UnificationInstruction,
-  machine::{AbstractMachine, VariableBinding},
+  machine::AbstractMachine,
   meta::QueryMeta,
+  variable_allocator::VariableAllocator,
+  variable_bank::VariableBank,
 };
 
 pub struct QueryEngine {
@@ -22,11 +24,12 @@ impl QueryEngine {
   fn build_evaluation_instructions(
     &self,
     query: &Query,
-    subject_variable: usize,
     yield_facts: bool,
     target_facts_precedence: &[usize],
     explain: Option<&ExplainQuery>,
     skip_empty: bool,
+    variable_allocator: SharedVariableAllocator,
+    preset_subject_variable: Option<usize>,
   ) -> Vec<UnificationInstruction> {
     let meta = query
       .meta
@@ -68,14 +71,21 @@ impl QueryEngine {
     );
 
     let mut instructions = Vec::new();
+    let query_name = System::get_subject_name(&self.database, &query.subject);
 
     if target_facts.is_empty() {
       if skip_empty {
         return instructions;
       }
 
+      let subject_variable =
+        preset_subject_variable.unwrap_or_else(|| variable_allocator.allocate_raw_variable());
+
       // Yield everything since there are no further restrictions
       instructions.push(UnificationInstruction::AllocateFrame { size: 1 });
+      instructions.push(UnificationInstruction::DebugComment {
+        comment: format!("?{} - empty", query_name.unwrap_or_default()),
+      });
       instructions.push(UnificationInstruction::MaybeYield);
       instructions.push(UnificationInstruction::SkipSubject {
         subject: query.subject.clone(),
@@ -89,7 +99,7 @@ impl QueryEngine {
       return instructions;
     }
 
-    if let Some(explain) = explain {
+    if let Some(_explain) = explain {
       for (fact_index, query_fact_index, _) in &target_facts {
         instructions.push(UnificationInstruction::TraceConstraintCreate {
           constraint: *query_fact_index,
@@ -98,9 +108,16 @@ impl QueryEngine {
       }
     }
 
+    let subject_variable =
+      preset_subject_variable.unwrap_or_else(|| variable_allocator.allocate_raw_variable());
+
     let mut trace_bound = false;
     for (_, query_fact_index, query_fact) in target_facts.into_iter() {
+      let fact_string = System::get_human_readable_fact(&self.database, query_fact);
       instructions.push(UnificationInstruction::AllocateFrame { size: 64 });
+      instructions.push(UnificationInstruction::DebugComment {
+        comment: format!("Frame for [{}]", fact_string),
+      });
 
       if let Some(explain) = explain
         && !trace_bound
@@ -145,6 +162,8 @@ impl QueryEngine {
       }
 
       if query_fact.value.evaluated {
+        let variable = variable_allocator.allocate_for_subject(&query_fact.value.subject);
+
         let sub_fact_instructions = self.build_evaluation_instructions(
           &Query {
             evaluated: true,
@@ -152,14 +171,25 @@ impl QueryEngine {
             property: query_fact.value.property.clone(),
             subject: query_fact.value.subject.clone(),
           },
-          subject_variable + 1,
           false,
           &[],
           None,
           true,
+          variable_allocator.clone(),
+          Some(variable),
         );
-        instructions.push(UnificationInstruction::UnifyValue {
-          variable: subject_variable + 1,
+
+        instructions.push(UnificationInstruction::DebugComment {
+          comment: format!(
+            "Sub query for ?{}",
+            System::get_subject_name(&self.database, &query_fact.value.subject).unwrap_or_default()
+          ),
+        });
+
+        instructions.push(UnificationInstruction::UnifyValue { variable });
+        instructions.push(UnificationInstruction::TraceSubQuery {
+          query: query_fact.value.subject.clone(),
+          variable,
         });
         instructions.extend(sub_fact_instructions);
       } else if !match_subject(&query_fact.value.subject, &System::CORE_WILDCARD_SUBJECT) {
@@ -189,12 +219,23 @@ impl QueryEngine {
     instructions
   }
 
-  pub fn query<'a>(&'a self, query: &Query) -> AbstractMachine<'a> {
-    let instructions = self.build_evaluation_instructions(query, 0, true, &[], None, false);
-    AbstractMachine::new(instructions, &self.database, self)
+  pub fn query<'a>(
+    &'a self,
+    query: &Query,
+    bank: SharedVariableBank,
+    allocator: SharedVariableAllocator,
+  ) -> AbstractMachine<'a> {
+    let instructions =
+      self.build_evaluation_instructions(query, true, &[], None, false, allocator.clone(), None);
+    AbstractMachine::new(instructions, &self.database, self, bank, allocator)
   }
 
-  fn explain_raw(&self, explain: &ExplainQuery) -> ExplainResult {
+  fn explain_raw(
+    &self,
+    explain: &ExplainQuery,
+    bank: SharedVariableBank,
+    allocator: SharedVariableAllocator,
+  ) -> ExplainResult {
     let mut enforced_fact_precedence = explain.facts.keys().cloned().collect::<Vec<_>>();
     enforced_fact_precedence.sort_unstable();
 
@@ -205,20 +246,27 @@ impl QueryEngine {
         property: None,
         subject: explain.query_subject.clone(),
       },
-      0,
       true,
       &enforced_fact_precedence,
       Some(explain),
       false,
+      allocator.clone(),
+      None,
     );
 
-    let mut machine = AbstractMachine::new(instructions, &self.database, &self);
+    let mut machine = AbstractMachine::new(instructions, &self.database, &self, bank, allocator);
+    //machine.log_instructions = true;
     while machine.next().is_some() {}
 
     machine.explain_result
   }
 
-  pub fn explain(&self, explain_subject: &Subject) -> ExplainResult {
+  pub fn explain(
+    &self,
+    explain_subject: &Subject,
+    bank: SharedVariableBank,
+    allocator: SharedVariableAllocator,
+  ) -> ExplainResult {
     let target_facts = self.database.get_facts_for_subject(
       explain_subject,
       &QueryMeta {
@@ -259,6 +307,6 @@ impl QueryEngine {
       target_subject,
     };
 
-    self.explain_raw(&query)
+    self.explain_raw(&query, bank, allocator)
   }
 }

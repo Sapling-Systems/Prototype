@@ -1,14 +1,20 @@
 use anyhow::{Context, Result};
 use colored::*;
 use sapling_data_model::{Fact, Query, Subject};
-use sapling_query_engine::{ExplainConstraintEvaluationOutcome, FoundFact, QueryEngine, System};
+use sapling_query_engine::{
+  EvaluationType, ExplainConstraintEvaluationOutcome, FoundFact, QueryEngine,
+  SharedVariableAllocator, SharedVariableBank, System,
+};
 use similar::{ChangeTag, TextDiff};
-use std::fs;
+use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Arc;
+use std::{fs, rc::Rc};
 
 mod parser;
 use parser::{SubjectRegistry, TestLine};
+
+const MEMORY_BANK_SIZE: usize = 128;
 
 fn resolve_fact_references(
   database: &mut sapling_query_engine::Database,
@@ -153,11 +159,29 @@ fn format_explain_result(
           ));
         }
       }
-
+      ExplainFactEvent::EvaluatingSubQuery {
+        constraint_id,
+        target,
+        target_query,
+        outcome,
+      } => {
+        let outcome = match outcome {
+          ExplainConstraintEvaluationOutcome::Passed => "PASS",
+          ExplainConstraintEvaluationOutcome::Rejected(..) => "REJECTED",
+        };
+        lines.push(format!(
+          "Fact{}: Evaluating SubQuery ?{} yields {} => {}",
+          constraint_id,
+          format_subject(engine, target_query),
+          format_subject(engine, target),
+          outcome
+        ));
+      }
       ExplainFactEvent::EvaluatingConstraint {
         constraint_id,
         outcome,
         evaluation,
+        ty,
       } => {
         use sapling_query_engine::ExplainConstraintEvaluation;
         match evaluation {
@@ -171,12 +195,21 @@ fn format_explain_result(
               ExplainConstraintEvaluationOutcome::Rejected(..) => "REJECTED",
             };
             lines.push(format!(
-              "Fact{}: Subject {} {} {} => {}",
+              "Fact{}: Subject {} {} {} => {}{}",
               constraint_id,
               format_subject(engine, actual),
               format_subject(engine, operator),
-              format_subject(engine, target),
-              outcome
+              if let Some(target) = target {
+                format_subject(engine, target)
+              } else {
+                "~unset~".to_string()
+              },
+              outcome,
+              if ty == &EvaluationType::Unification {
+                " (unification)"
+              } else {
+                ""
+              }
             ));
           }
           ExplainConstraintEvaluation::Property {
@@ -184,17 +217,20 @@ fn format_explain_result(
             actual,
             operator,
           } => {
-            let outcome = if format_subject(engine, target) == format_subject(engine, actual) {
-              "PASS"
-            } else {
-              "FAIL"
+            let outcome = match outcome {
+              ExplainConstraintEvaluationOutcome::Passed => "PASS",
+              ExplainConstraintEvaluationOutcome::Rejected(..) => "REJECTED",
             };
             lines.push(format!(
               "Fact{}: Property {} {} {} => {}",
               constraint_id,
               format_subject(engine, actual),
               format_subject(engine, operator),
-              format_subject(engine, target),
+              if let Some(target) = target {
+                format_subject(engine, target)
+              } else {
+                "~unset~".to_string()
+              },
               outcome
             ));
           }
@@ -203,18 +239,26 @@ fn format_explain_result(
             actual,
             operator,
           } => {
-            let outcome = if format_subject(engine, target) == format_subject(engine, actual) {
-              "PASS"
-            } else {
-              "FAIL"
+            let outcome = match outcome {
+              ExplainConstraintEvaluationOutcome::Passed => "PASS",
+              ExplainConstraintEvaluationOutcome::Rejected(..) => "REJECTED",
             };
             lines.push(format!(
-              "Fact{}: Operator {} {} {} => {}",
+              "Fact{}: Operator {} {} {} => {}{}",
               constraint_id,
               format_subject(engine, actual),
               format_subject(engine, operator),
-              format_subject(engine, target),
-              outcome
+              if let Some(target) = target {
+                format_subject(engine, target)
+              } else {
+                "~unset~".to_string()
+              },
+              outcome,
+              if ty == &EvaluationType::Unification {
+                " (unification)"
+              } else {
+                ""
+              }
             ));
           }
           ExplainConstraintEvaluation::Value {
@@ -222,18 +266,26 @@ fn format_explain_result(
             actual,
             operator,
           } => {
-            let outcome = if format_subject(engine, target) == format_subject(engine, actual) {
-              "PASS"
-            } else {
-              "FAIL"
+            let outcome = match outcome {
+              ExplainConstraintEvaluationOutcome::Passed => "PASS",
+              ExplainConstraintEvaluationOutcome::Rejected(..) => "REJECTED",
             };
             lines.push(format!(
-              "Fact{}: Value {} {} {} => {}",
+              "Fact{}: Value {} {} {} => {}{}",
               constraint_id,
               format_subject(engine, actual),
               format_subject(engine, operator),
-              format_subject(engine, target),
-              outcome
+              if let Some(target) = target {
+                format_subject(engine, target)
+              } else {
+                "~unset~".to_string()
+              },
+              outcome,
+              if ty == &EvaluationType::Unification {
+                " (unification)"
+              } else {
+                ""
+              }
             ));
           }
         }
@@ -247,13 +299,20 @@ fn format_explain_result(
 fn format_subject(engine: &QueryEngine, subject: &Subject) -> String {
   match subject {
     Subject::Static { uuid } => {
+      let bank = SharedVariableBank::new(MEMORY_BANK_SIZE);
+      let allocator = SharedVariableAllocator::new();
+
       let name = engine
-        .query(&Query {
-          subject: subject.clone(),
-          property: Some(System::CORE_PROPERTY_SUBJECT_NAME),
-          meta: Some(System::CORE_META_INCLUDE),
-          evaluated: false,
-        })
+        .query(
+          &Query {
+            subject: subject.clone(),
+            property: Some(System::CORE_PROPERTY_SUBJECT_NAME),
+            meta: Some(System::CORE_META_INCLUDE),
+            evaluated: false,
+          },
+          bank,
+          allocator,
+        )
         .next();
 
       if let Some(Subject::String { value }) = name.map(|fact| &fact.fact.value.subject) {
@@ -281,11 +340,15 @@ fn format_fact(engine: &QueryEngine, fact: &Fact) -> String {
     format_subject(engine, &fact.property.subject)
   };
 
-  let value_str = if fact.value.evaluated {
+  let mut value_str = if fact.value.evaluated {
     format!("?{}", format_subject(engine, &fact.value.subject))
   } else {
     format_subject(engine, &fact.value.subject)
   };
+
+  if let Some(value_property) = &fact.value.property {
+    value_str += &format!("/{}", format_subject(engine, value_property));
+  }
 
   format!(
     "{}/{} {} {}",
@@ -339,14 +402,21 @@ fn run_test(file_path: &Path) -> Result<bool> {
           }
         );
 
-        let machine = engine.query(&Query {
-          evaluated: query.subject_evaluated,
-          meta: None,
-          property: query.property.clone(),
-          subject: query.subject.clone(),
-        });
-        //println!("Instructions: {:#?}", machine.instructions);
+        let bank = SharedVariableBank::new(MEMORY_BANK_SIZE);
+        let allocator = SharedVariableAllocator::new();
 
+        let mut machine = engine.query(
+          &Query {
+            evaluated: query.subject_evaluated,
+            meta: None,
+            property: query.property.clone(),
+            subject: query.subject.clone(),
+          },
+          bank,
+          allocator,
+        );
+        //println!("Instructions: {:#?}", machine.instructions);
+        //machine.log_instructions = true;
         let actual_facts: Vec<FoundFact> = machine.collect();
 
         println!(
@@ -528,7 +598,10 @@ fn run_explain_test(file_path: &Path) -> Result<bool> {
         );
 
         // Call the explain function
-        let explain_result = engine.explain(&explain_query.subject);
+        let bank = SharedVariableBank::new(32);
+        let allocator = SharedVariableAllocator::new();
+
+        let explain_result = engine.explain(&explain_query.subject, bank, allocator);
 
         // Format the result into lines
         let actual_lines = format_explain_result(&engine, &database, &explain_result);
