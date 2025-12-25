@@ -293,6 +293,18 @@ fn format_explain_result(
     }
   }
 
+  // Format variables
+  let mut variables = result.variables.iter().collect::<Vec<_>>();
+  variables.sort_by_key(|var| var.0);
+
+  for (variable, value) in variables {
+    lines.push(format!(
+      "Unification Variable {} = {}",
+      variable,
+      format_subject(engine, value)
+    ));
+  }
+
   lines
 }
 

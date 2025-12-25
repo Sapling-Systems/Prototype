@@ -1,0 +1,100 @@
+pet1/type = 'dog'
+pet1/age = 3
+pet2/type = 'cat'
+pet2/age = 2
+pet3/type = 'dog'
+pet3/age = 1
+
+owner1/name = 'Alice'
+owner1/prefers = 'dog'
+owner1/pet = pet1
+
+owner2/name = 'Bob'
+owner2/prefers = 'cat'
+owner2/pet = pet2
+
+owner3/name = 'Cara'
+owner3/prefers = 'dog'
+owner3/pet = pet3
+
+owner4/name = 'Dave' @owner4Name
+owner4/prefers = 'dog' @owner4Prefers
+owner4/pet = pet2 @owner4Pet
+
+owner5/name = 'Eve'
+owner5/prefers = 'cat'
+owner5/pet = pet1
+
+pets_by_type/type == ?kind
+
+owners_with_matching_pets/name == *
+owners_with_matching_pets/prefers == ?kind
+owners_with_matching_pets/pet == ?pets_by_type
+
+explainQuery/query = owners_with_matching_pets
+explainQuery/subject = owner4
+
+> explainQuery
+#> Constraint0: 0 [owners_with_matching_pets/name == *]
+#> Constraint1: 1 [owners_with_matching_pets/prefers == ?kind]
+#> Constraint2: 2 [owners_with_matching_pets/pet == ?pets_by_type]
+#> Subject: owner4
+#> Unification Variable kind = "dog"
+#> Unification Variable pets_by_type = pet2
+
+explainQuery/fact0 = @owner4Name
+
+> explainQuery
+#> Constraint0: 0 [owners_with_matching_pets/name == *]
+#> Constraint1: 1 [owners_with_matching_pets/prefers == ?kind]
+#> Constraint2: 2 [owners_with_matching_pets/pet == ?pets_by_type]
+#> Subject: owner4
+#> Fact0: 44 [owner4/name = "Dave"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject owner4 == owner4 => PASS (unification)
+#> Fact0: Property name == name => PASS
+#> Unification Variable kind = "dog"
+#> Unification Variable pets_by_type = pet2
+
+explainQuery/fact1 = @owner4Prefers
+
+> explainQuery
+#> Constraint0: 0 [owners_with_matching_pets/name == *]
+#> Constraint1: 1 [owners_with_matching_pets/prefers == ?kind]
+#> Constraint2: 2 [owners_with_matching_pets/pet == ?pets_by_type]
+#> Subject: owner4
+#> Fact0: 44 [owner4/name = "Dave"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject owner4 == owner4 => PASS (unification)
+#> Fact0: Property name == name => PASS
+#> Fact1: 45 [owner4/prefers = "dog"]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject owner4 == owner4 => PASS (unification)
+#> Fact1: Property prefers == prefers => PASS
+#> Fact1: Evaluating SubQuery ?kind yields "dog" => REJECTED
+#> Unification Variable kind = "dog"
+#> Unification Variable pets_by_type = pet2
+
+explainQuery/fact2 = @owner4Pet
+
+> explainQuery
+#> Constraint0: 0 [owners_with_matching_pets/name == *]
+#> Constraint1: 1 [owners_with_matching_pets/prefers == ?kind]
+#> Constraint2: 2 [owners_with_matching_pets/pet == ?pets_by_type]
+#> Subject: owner4
+#> Fact0: 44 [owner4/name = "Dave"]
+#> Fact0: Operator = == = => PASS
+#> Fact0: Subject owner4 == owner4 => PASS (unification)
+#> Fact0: Property name == name => PASS
+#> Fact1: 45 [owner4/prefers = "dog"]
+#> Fact1: Operator = == = => PASS
+#> Fact1: Subject owner4 == owner4 => PASS (unification)
+#> Fact1: Property prefers == prefers => PASS
+#> Fact1: Evaluating SubQuery ?kind yields "dog" => PASS
+#> Fact2: 46 [owner4/pet = pet2]
+#> Fact2: Operator = == = => PASS
+#> Fact2: Subject owner4 == owner4 => PASS (unification)
+#> Fact2: Property pet == pet => PASS
+#> Fact2: Evaluating SubQuery ?pets_by_type yields pet2 => REJECTED
+#> Unification Variable kind = "dog"
+#> Unification Variable pets_by_type = pet2

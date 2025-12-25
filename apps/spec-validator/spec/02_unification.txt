@@ -112,6 +112,14 @@ owner3/name = 'Cara'
 owner3/prefers = 'dog'
 owner3/pet = pet3
 
+owner4/name = 'Dave'
+owner4/prefers = 'dog'
+owner4/pet = pet2
+
+owner5/name = 'Eve'
+owner5/prefers = 'cat'
+owner5/pet = pet1
+
 pets_by_type/type == ?kind
 
 > ?pets_by_type

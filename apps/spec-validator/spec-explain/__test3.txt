@@ -46,6 +46,7 @@ explainQuery/subject = person1
 #> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
 #> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
 #> Subject: person1
+#> Unification Variable euro_countries = country_de
 
 explainQuery/fact0 = @person1Name
 
@@ -59,6 +60,7 @@ explainQuery/fact0 = @person1Name
 #> Fact0: Subject person1 == person1 => PASS (unification)
 #> Fact0: Property name == name => PASS
 #> Yielded for Fact0: 44 [person1/name = "Alice"]
+#> Unification Variable euro_countries = country_de
 
 
 explainQuery/fact1 = @dynamicProperty
@@ -78,6 +80,7 @@ explainQuery/fact1 = @dynamicProperty
 #> Fact1: Value "hello" == "hello" => PASS
 #> Yielded for Fact0: 44 [person1/name = "Alice"]
 #> Yielded for Fact1: 66 [?everything/dynamicProperty = "hello"] (subject: person1)
+#> Unification Variable euro_countries = country_de
 
 explainQuery/fact2 = @person1Country
 > explainQuery
@@ -103,6 +106,7 @@ explainQuery/fact2 = @person1Country
 #> Yielded for Fact0: 44 [person1/name = "Alice"]
 #> Yielded for Fact1: 66 [?everything/dynamicProperty = "hello"] (subject: person1)
 #> Yielded for Fact2: 46 [person1/country = country_de]
+#> Unification Variable euro_countries = country_de
 
 
 explainQuery2/query = people_in_euro_countries_dynamic
@@ -113,6 +117,7 @@ explainQuery2/subject = person2
 #> Constraint1: 1 [people_in_euro_countries_dynamic/dynamicProperty == "hello"]
 #> Constraint2: 2 [people_in_euro_countries_dynamic/country == ?euro_countries]
 #> Subject: person2
+#> Unification Variable euro_countries = country_uk
 
 explainQuery2/fact0 = @person2Name
 
@@ -125,6 +130,7 @@ explainQuery2/fact0 = @person2Name
 #> Fact0: Operator = == = => PASS
 #> Fact0: Subject person2 == person2 => PASS (unification)
 #> Fact0: Property name == name => PASS
+#> Unification Variable euro_countries = country_uk
 
 explainQuery2/fact2 = @person2Country
 
@@ -142,6 +148,7 @@ explainQuery2/fact2 = @person2Country
 #> Fact2: Subject person2 == person2 => PASS (unification)
 #> Fact2: Property country == country => PASS
 #> Fact2: Evaluating SubQuery ?euro_countries yields country_uk => REJECTED
+#> Unification Variable euro_countries = country_uk
 
 explainQuery2/fact1 = @dynamicProperty
 
@@ -164,6 +171,7 @@ explainQuery2/fact1 = @dynamicProperty
 #> Fact2: Subject person2 == person2 => PASS (unification)
 #> Fact2: Property country == country => PASS
 #> Fact2: Evaluating SubQuery ?euro_countries yields country_uk => REJECTED
+#> Unification Variable euro_countries = country_uk
 
 explainQuery3/query = people_in_euro_countries_dynamic
 explainQuery3/subject = person3
@@ -193,3 +201,4 @@ explainQuery3/fact2 = @person3Country
 #> Yielded for Fact0: 50 [person3/name = "Charlie"]
 #> Yielded for Fact1: 66 [?everything/dynamicProperty = "hello"] (subject: person3)
 #> Yielded for Fact2: 52 [person3/country = country_fr]
+#> Unification Variable euro_countries = country_fr

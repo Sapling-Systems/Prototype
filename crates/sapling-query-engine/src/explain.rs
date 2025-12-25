@@ -15,6 +15,7 @@ pub struct ExplainQuery {
 pub struct ExplainResult {
   pub constraints: Vec<(usize, usize)>,
   pub subject: Option<Subject>,
+  pub variables: HashMap<String, Subject>,
   pub fact_events: Vec<ExplainFactEvent>,
   pub instruction: Vec<UnificationInstruction>,
 }

@@ -15,6 +15,10 @@ impl VariableAllocator {
     }
   }
 
+  fn get_subject_map(&self) -> HashMap<u128, usize> {
+    self.subject_map.clone()
+  }
+
   fn allocate_raw_variable(&mut self) -> usize {
     let id = self.next_variable_id;
     self.next_variable_id += 1;
@@ -54,5 +58,9 @@ impl SharedVariableAllocator {
 
   pub fn allocate_for_subject(&self, subject: &Subject) -> usize {
     self.instance.borrow_mut().allocate_for_subject(subject)
+  }
+
+  pub fn get_subject_map(&self) -> HashMap<u128, usize> {
+    self.instance.borrow().get_subject_map()
   }
 }

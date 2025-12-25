@@ -1,7 +1,9 @@
+# IN PROGRESS
+
+- Concept for built-in functions
+
 # TODO
 
-- Explain unification
-- Concept for built-in functions
 - Explain for functions
 - IDE UI: Structure Editor
 - Meta: Multiple same properties / ALL meta

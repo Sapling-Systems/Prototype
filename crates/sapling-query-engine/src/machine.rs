@@ -1,4 +1,7 @@
-use std::{collections::VecDeque, fmt::Debug};
+use std::{
+  collections::{HashMap, VecDeque},
+  fmt::Debug,
+};
 
 use sapling_data_model::{Fact, Query, Subject};
 
@@ -48,6 +51,7 @@ pub struct AbstractMachine<'a> {
   variable_allocator: SharedVariableAllocator,
   pub log_instructions: bool,
   pub explain_result: ExplainResult,
+  explain_enabled: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -73,11 +77,13 @@ impl<'a> AbstractMachine<'a> {
       yielded: VecDeque::new(),
       stack: Vec::new(),
       log_instructions: false,
+      explain_enabled: false,
       explain_result: ExplainResult {
         constraints: vec![],
         subject: None,
         fact_events: vec![],
         instruction: instructions.clone(),
+        variables: HashMap::new(),
       },
       instructions,
       variable_bank,
@@ -512,6 +518,7 @@ impl<'a> AbstractMachine<'a> {
         constraint,
         fact_index,
       } => {
+        self.explain_enabled = true;
         self
           .explain_result
           .constraints
@@ -576,6 +583,8 @@ impl<'a> AbstractMachine<'a> {
       }
     }
 
+    self.capture_explain_variables();
+
     if let Some(frame) = self.stack.last_mut() {
       if reset_frame {
         if let Some(last_event) = self.explain_result.fact_events.last_mut()
@@ -622,6 +631,22 @@ impl<'a> AbstractMachine<'a> {
     }
 
     true
+  }
+
+  fn capture_explain_variables(&mut self) {
+    if self.explain_enabled {
+      let subject_map = self.variable_allocator.get_subject_map();
+      for (subject_id, variable) in subject_map {
+        let subject_name =
+          System::get_subject_name(self.database, &Subject::Static { uuid: subject_id });
+        if let Some(variable_value) = self.variable_bank.get(variable) {
+          self.explain_result.variables.insert(
+            subject_name.unwrap_or_else(|| "-".to_string()),
+            variable_value,
+          );
+        }
+      }
+    }
   }
 
   pub fn execute_until_yield(&mut self) -> Option<FoundFact<'a>> {
