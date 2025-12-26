@@ -20,3 +20,4 @@ pub use query_engine::QueryEngine;
 pub use system::System;
 pub use variable_allocator::SharedVariableAllocator;
 pub use variable_bank::SharedVariableBank;
+pub use watcher::{DatabaseWatcher, QueryWatcher};

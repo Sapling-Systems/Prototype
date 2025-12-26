@@ -6,6 +6,10 @@ pub enum UnificationInstruction {
   AllocateFrame {
     size: usize,
   },
+  AllocateFact {
+    fact_index: usize,
+    reset_address: Option<usize>,
+  },
 
   // Yield instructions
   MaybeYield,

@@ -91,6 +91,13 @@ impl<'a> AbstractMachine<'a> {
     }
   }
 
+  pub fn reset_machine(&mut self) {
+    self.fallback_instruction_pointer = 0;
+    self.yielded.clear();
+    self.stack.clear();
+    self.variable_bank.reset();
+  }
+
   fn exhaust_frame(&mut self) -> bool {
     if self.stack.is_empty() || self.stack.len() == 1 {
       return false;
@@ -243,6 +250,29 @@ impl<'a> AbstractMachine<'a> {
           SearchFrame::new_static(self.database, instruction_index + 1, self.stack.is_empty());
         self.stack.push(new_frame);
       }
+      UnificationInstruction::AllocateFact {
+        fact_index,
+        reset_address,
+      } => {
+        let fact = self
+          .database
+          .get_fact(*fact_index)
+          .expect("Fact does not exist");
+
+        let found_fact = FoundFact {
+          fact,
+          fact_index: *fact_index,
+          subject_binding: None,
+        };
+
+        self.variable_bank.push_checkpoint();
+        let new_frame = SearchFrame::new_constant_frame(
+          found_fact,
+          self.stack.is_empty(),
+          reset_address.unwrap_or(instruction_index + 1),
+        );
+        self.stack.push(new_frame);
+      }
 
       // Yielding
       UnificationInstruction::MaybeYield => {
@@ -280,6 +310,7 @@ impl<'a> AbstractMachine<'a> {
         if direct_match {
         } else if fact.subject.evaluated && self.follow_evaluated_subjects {
           let mut machine = self.query_engine.query(
+            self.database,
             &Query {
               subject: fact.subject.subject.clone(),
               evaluated: fact.subject.evaluated,
@@ -388,6 +419,7 @@ impl<'a> AbstractMachine<'a> {
           let checkpoint_id = self.variable_bank.push_checkpoint();
 
           let mut machine = self.query_engine.query(
+            self.database,
             &Query {
               subject: fact.subject.subject.clone(),
               evaluated: fact.subject.evaluated,
@@ -481,6 +513,7 @@ impl<'a> AbstractMachine<'a> {
         if direct_match && property_match {
         } else if fact.value.evaluated || fact.value.property.is_some() {
           let mut machine = self.query_engine.query(
+            self.database,
             &Query {
               subject: fact.value.subject.clone(),
               evaluated: fact.value.evaluated,
@@ -704,7 +737,6 @@ pub(crate) struct SearchFrame<'a> {
   maybe_yielded: Vec<FoundFact<'a>>,
   current_investigated_fact: Option<FoundFact<'a>>,
   debug: Option<Subject>,
-  database: &'a Database,
   continue_marker: bool,
   waiting_for_subquery_trace: bool,
 }
@@ -723,7 +755,6 @@ impl<'a> SearchFrame<'a> {
     });
 
     let me = Self {
-      database,
       tracing: None,
       start_instruction_index,
       waiting_for_subquery_trace: false,
@@ -747,7 +778,6 @@ impl<'a> SearchFrame<'a> {
     let current_investigated_fact = machine.next();
 
     let me = Self {
-      database: machine.database,
       tracing: None,
       start_instruction_index,
       waiting_for_subquery_trace: false,
@@ -780,7 +810,6 @@ impl<'a> SearchFrame<'a> {
     machine.follow_evaluated_subjects = false;
 
     let mut me = Self {
-      database: machine.database,
       tracing: None,
       waiting_for_subquery_trace: false,
       continue_marker,
@@ -800,9 +829,28 @@ impl<'a> SearchFrame<'a> {
 
     me
   }
+
+  pub fn new_constant_frame(
+    fact: FoundFact<'a>,
+    continue_marker: bool,
+    start_instruction_index: usize,
+  ) -> Self {
+    Self {
+      tracing: None,
+      waiting_for_subquery_trace: false,
+      continue_marker,
+      start_instruction_index,
+      current_instruction_index: start_instruction_index,
+      debug: None,
+      state: FrameState::Constant,
+      maybe_yielded: Vec::new(),
+      current_investigated_fact: Some(fact),
+    }
+  }
 }
 
 enum FrameState<'a> {
+  Constant,
   Static {
     iterator: NaiveFactIterator<'a>,
   },
@@ -820,6 +868,7 @@ enum FrameState<'a> {
 impl<'a> std::fmt::Debug for FrameState<'a> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
+      FrameState::Constant { .. } => f.debug_struct("FrameState::Constant").finish(),
       FrameState::Static { .. } => f.debug_struct("FrameState::Static").finish(),
       FrameState::SubQuery { .. } => f.debug_struct("FrameState::SubQuery").finish(),
       FrameState::SubjectUnification { variable, .. } => f
@@ -830,25 +879,12 @@ impl<'a> std::fmt::Debug for FrameState<'a> {
   }
 }
 
-impl<'a> Iterator for FrameState<'a> {
-  type Item = FoundFact<'a>;
-
-  fn next(&mut self) -> Option<Self::Item> {
-    match self {
-      FrameState::Static { iterator } => iterator.next().map(|(fact_index, fact)| FoundFact {
-        fact,
-        fact_index,
-        subject_binding: None,
-      }),
-      FrameState::SubQuery { machine, .. } => machine.next(),
-      FrameState::SubjectUnification { machine, .. } => machine.next(),
-    }
-  }
-}
-
 impl<'a> SearchFrame<'a> {
   fn before_drop(&mut self, bank: &SharedVariableBank) {
     match self.state {
+      FrameState::Constant => {
+        bank.pop_checkpoint();
+      }
       FrameState::Static { .. } => {
         bank.pop_checkpoint();
       }
@@ -871,6 +907,9 @@ impl<'a> SearchFrame<'a> {
   fn reset(&mut self, bank: &SharedVariableBank) {
     // Advanced iterator
     match &mut self.state {
+      FrameState::Constant => {
+        self.current_investigated_fact = None;
+      }
       FrameState::SubQuery { machine, .. } => {
         self.current_investigated_fact = machine.next();
       }

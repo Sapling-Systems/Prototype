@@ -1,7 +1,6 @@
 # IN PROGRESS
 
 - Concept for built-in functions
-- Query watch
 
 # TODO
 

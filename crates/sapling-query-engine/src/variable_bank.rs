@@ -82,6 +82,13 @@ impl VariableBank {
     }
   }
 
+  fn reset(&mut self) {
+    for variable in &mut self.variables {
+      *variable = VariableBinding::Unbound;
+    }
+    self.checkpoints.clear();
+  }
+
   fn debug_print(&self) {
     println!("Variable Bank:");
     println!("Checkpoints: {:#?}", self.checkpoints);
@@ -140,5 +147,9 @@ impl SharedVariableBank {
 
   pub fn debug_print(&self) {
     self.instance.borrow().debug_print();
+  }
+
+  pub fn reset(&self) {
+    self.instance.borrow_mut().reset();
   }
 }
