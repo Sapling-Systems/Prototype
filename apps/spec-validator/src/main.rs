@@ -392,7 +392,89 @@ fn format_fact(engine: &QueryEngine, fact: &Fact) -> String {
   )
 }
 
-fn run_test(file_path: &Path) -> Result<bool> {
+fn update_test_file(file_path: &Path, old_lines: &[String], new_lines: &[String]) -> Result<()> {
+  let content = fs::read_to_string(file_path)
+    .with_context(|| format!("Failed to read file: {:?}", file_path))?;
+
+  // Detect line ending style in the file
+  let line_ending = if content.contains("\r\n") {
+    "\r\n"
+  } else {
+    "\n"
+  };
+
+  // Find and replace the old expected output with the new actual output
+  let mut updated_content = content.clone();
+
+  // Build the old expected section (>> prefixed lines)
+  let old_section = old_lines
+    .iter()
+    .map(|line| format!(">> {}", line))
+    .collect::<Vec<_>>()
+    .join(line_ending);
+
+  // Build the new expected section (>> prefixed lines)
+  let new_section = new_lines
+    .iter()
+    .map(|line| format!(">> {}", line))
+    .collect::<Vec<_>>()
+    .join(line_ending);
+
+  // Replace the old section with the new one
+  if old_section != new_section {
+    updated_content = updated_content.replace(&old_section, &new_section);
+    fs::write(file_path, updated_content)
+      .with_context(|| format!("Failed to write updated file: {:?}", file_path))?;
+    println!("  {}", "Updated test file".yellow().bold());
+  }
+
+  Ok(())
+}
+
+fn update_explain_test_file(
+  file_path: &Path,
+  old_lines: &[String],
+  new_lines: &[String],
+) -> Result<()> {
+  let content = fs::read_to_string(file_path)
+    .with_context(|| format!("Failed to read file: {:?}", file_path))?;
+
+  // Detect line ending style in the file
+  let line_ending = if content.contains("\r\n") {
+    "\r\n"
+  } else {
+    "\n"
+  };
+
+  // Find and replace the old expected output with the new actual output
+  let mut updated_content = content.clone();
+
+  // Build the old expected section (#> prefixed lines)
+  let old_section = old_lines
+    .iter()
+    .map(|line| format!("#> {}", line))
+    .collect::<Vec<_>>()
+    .join(line_ending);
+
+  // Build the new expected section (#> prefixed lines)
+  let new_section = new_lines
+    .iter()
+    .map(|line| format!("#> {}", line))
+    .collect::<Vec<_>>()
+    .join(line_ending);
+
+  // Replace the old section with the new one
+  if old_section != new_section {
+    updated_content = updated_content.replace(&old_section, &new_section);
+    fs::write(file_path, updated_content)
+      .with_context(|| format!("Failed to write updated file: {:?}", file_path))?;
+    println!("  {}", "Updated test file".yellow().bold());
+  }
+
+  Ok(())
+}
+
+fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
   let content = fs::read_to_string(file_path)
     .with_context(|| format!("Failed to read file: {:?}", file_path))?;
 
@@ -488,6 +570,45 @@ fn run_test(file_path: &Path) -> Result<bool> {
         if actual_facts.len() != query.expected_facts.len() {
           println!("  {}", "FAIL: Different number of facts".red().bold());
           success = false;
+
+          if update_mode {
+            // Build expected output lines from query
+            let old_lines: Vec<String> = query
+              .expected_facts
+              .iter()
+              .map(|expected| {
+                let fact_str = format_fact(&engine, &expected.fact);
+                if let Some(subject_mapping) = &expected.subject_mapping {
+                  format!(
+                    "{} ;; subject={}",
+                    fact_str,
+                    format_subject(&engine, subject_mapping)
+                  )
+                } else {
+                  fact_str
+                }
+              })
+              .collect();
+
+            // Build actual output lines
+            let new_lines: Vec<String> = actual_facts
+              .iter()
+              .map(|found_fact| {
+                let fact_str = format_fact(&engine, found_fact.fact);
+                if let Some(subject_binding) = &found_fact.subject_binding {
+                  format!(
+                    "{} ;; subject={}",
+                    fact_str,
+                    format_subject(&engine, subject_binding)
+                  )
+                } else {
+                  fact_str
+                }
+              })
+              .collect();
+
+            update_test_file(file_path, &old_lines, &new_lines)?;
+          }
         } else {
           let mut matches = true;
           let mut failure_reasons = Vec::new();
@@ -570,6 +691,45 @@ fn run_test(file_path: &Path) -> Result<bool> {
               println!("  {}", "FAIL: Facts don't match".red().bold());
             }
             success = false;
+
+            if update_mode {
+              // Build expected output lines from query
+              let old_lines: Vec<String> = query
+                .expected_facts
+                .iter()
+                .map(|expected| {
+                  let fact_str = format_fact(&engine, &expected.fact);
+                  if let Some(subject_mapping) = &expected.subject_mapping {
+                    format!(
+                      "{} ;; subject={}",
+                      fact_str,
+                      format_subject(&engine, subject_mapping)
+                    )
+                  } else {
+                    fact_str
+                  }
+                })
+                .collect();
+
+              // Build actual output lines
+              let new_lines: Vec<String> = actual_facts
+                .iter()
+                .map(|found_fact| {
+                  let fact_str = format_fact(&engine, found_fact.fact);
+                  if let Some(subject_binding) = &found_fact.subject_binding {
+                    format!(
+                      "{} ;; subject={}",
+                      fact_str,
+                      format_subject(&engine, subject_binding)
+                    )
+                  } else {
+                    fact_str
+                  }
+                })
+                .collect();
+
+              update_test_file(file_path, &old_lines, &new_lines)?;
+            }
           }
         }
 
@@ -584,7 +744,7 @@ fn run_test(file_path: &Path) -> Result<bool> {
   Ok(success)
 }
 
-fn run_explain_test(file_path: &Path) -> Result<bool> {
+fn run_explain_test(file_path: &Path, update_mode: bool) -> Result<bool> {
   let content = fs::read_to_string(file_path)
     .with_context(|| format!("Failed to read file: {:?}", file_path))?;
 
@@ -661,6 +821,10 @@ fn run_explain_test(file_path: &Path) -> Result<bool> {
           println!();
           print_diff(&explain_query.expected_lines, &actual_lines);
           success = false;
+
+          if update_mode {
+            update_explain_test_file(file_path, &explain_query.expected_lines, &actual_lines)?;
+          }
         }
 
         println!();
@@ -703,8 +867,9 @@ fn collect_spec_files(
 
 fn run_validation_suite(
   dir_path: &Path,
-  test_runner: fn(&Path) -> Result<bool>,
+  test_runner: fn(&Path, bool) -> Result<bool>,
   global_only_files: &[std::path::PathBuf],
+  update_mode: bool,
 ) -> Result<(usize, usize)> {
   let mut total_tests = 0;
   let mut passed_tests = 0;
@@ -747,7 +912,7 @@ fn run_validation_suite(
     }
 
     total_tests += 1;
-    match test_runner(&path) {
+    match test_runner(&path, update_mode) {
       Ok(true) => {
         passed_tests += 1;
         println!("{}", "✓ PASSED".green().bold());
@@ -766,6 +931,17 @@ fn run_validation_suite(
 }
 
 fn main() -> Result<()> {
+  let args = Args::parse();
+  let update_mode = args.update;
+
+  if update_mode {
+    println!("{}", "\n=== UPDATE MODE ENABLED ===".yellow().bold());
+    println!(
+      "{}",
+      "Test files will be updated with actual output when differences are found.\n".yellow()
+    );
+  }
+
   let spec_dir = Path::new("./apps/spec-validator/spec");
   let spec_explain_dir = Path::new("./apps/spec-validator/spec-explain");
 
@@ -797,7 +973,7 @@ fn main() -> Result<()> {
   // Run normal spec validation
   println!("\n{}\n", "=== Running Spec Validation ===".blue().bold());
   let (total_spec_tests, passed_spec_tests) =
-    run_validation_suite(spec_dir, run_test, &global_only_files)?;
+    run_validation_suite(spec_dir, run_test, &global_only_files, update_mode)?;
 
   if total_spec_tests == 0 {
     println!("No spec tests found in {:?}", spec_dir);
@@ -818,8 +994,12 @@ fn main() -> Result<()> {
     "\n{}\n",
     "=== Running Explain Spec Validation ===".blue().bold()
   );
-  let (total_explain_tests, passed_explain_tests) =
-    run_validation_suite(spec_explain_dir, run_explain_test, &global_only_files)?;
+  let (total_explain_tests, passed_explain_tests) = run_validation_suite(
+    spec_explain_dir,
+    run_explain_test,
+    &global_only_files,
+    update_mode,
+  )?;
 
   if total_explain_tests == 0 {
     println!("No explain spec tests found in {:?}", spec_explain_dir);
