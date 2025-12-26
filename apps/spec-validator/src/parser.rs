@@ -57,6 +57,11 @@ impl SubjectRegistry {
   }
 
   fn get_or_create_static_subject(&mut self, name: &str) -> Subject {
+    let system_subject = System::get_named_subject(name);
+    if let Some(system_subject) = system_subject {
+      return system_subject;
+    }
+
     if let Some(subject) = self.static_subjects.get(name) {
       subject.clone()
     } else {
@@ -142,15 +147,23 @@ impl SubjectRegistry {
   fn parse_subject_selector(
     &mut self,
     pair: pest::iterators::Pair<Rule>,
-  ) -> Result<SubjectSelector> {
+  ) -> Result<(SubjectSelector, bool)> {
     let mut evaluated = false;
+    let mut property_evaluated = false;
     let mut subject = None;
     let mut property = None;
 
+    let pairc = pair.clone();
     for inner_pair in pair.into_inner() {
-      match inner_pair.as_rule() {
+      let rule = inner_pair.as_rule();
+      match rule {
         Rule::evaluated_marker => {
-          evaluated = true;
+          let tag = inner_pair.as_node_tag();
+          if tag == Some("property") {
+            property_evaluated = true;
+          } else {
+            evaluated = true;
+          }
         }
         Rule::subject => {
           if subject.is_none() {
@@ -163,11 +176,14 @@ impl SubjectRegistry {
       }
     }
 
-    Ok(SubjectSelector {
-      subject: subject.context("Subject selector must have a subject")?,
-      evaluated,
-      property,
-    })
+    Ok((
+      SubjectSelector {
+        subject: subject.context("Subject selector must have a subject")?,
+        evaluated,
+        property,
+      },
+      property_evaluated,
+    ))
   }
 
   fn parse_fact(
@@ -181,6 +197,8 @@ impl SubjectRegistry {
     let mut fact_identifier = None;
 
     let mut operator = System::CORE_OPERATOR_IS.clone();
+
+    let pair_clone = pair.clone();
 
     for inner_pair in pair.into_inner() {
       match inner_pair.as_rule() {
@@ -228,7 +246,7 @@ impl SubjectRegistry {
       }
     }
 
-    let left = left_selector.context("Fact must have a left selector")?;
+    let (left, property_evaluated) = left_selector.context("Fact must have a left selector")?;
 
     // Decompose the left selector into subject and property
     let (subject_selector, property_selector) = if let Some(property) = left.property {
@@ -240,7 +258,7 @@ impl SubjectRegistry {
         },
         SubjectSelector {
           subject: property,
-          evaluated: false,
+          evaluated: property_evaluated,
           property: None,
         },
       )
@@ -263,7 +281,7 @@ impl SubjectRegistry {
       subject: subject_selector,
       property: property_selector,
       operator,
-      value: value_selector.context("Fact must have a value")?,
+      value: value_selector.context("Fact must have a value")?.0,
       meta,
     };
 
@@ -332,7 +350,7 @@ impl SubjectRegistry {
 
                       for query_pair in line_content.into_inner() {
                         if let Rule::subject_selector = query_pair.as_rule() {
-                          let selector = self.parse_subject_selector(query_pair)?;
+                          let (selector, _) = self.parse_subject_selector(query_pair)?;
                           current_query_subject = Some((selector.subject, selector.evaluated));
                           current_query_property = selector.property;
                         }

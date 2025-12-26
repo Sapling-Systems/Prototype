@@ -18,6 +18,7 @@ pub enum UnificationInstruction {
   CheckProperty {
     property: Subject,
   },
+  CheckPropertyConstAnyInteger,
   CheckValue {
     value: Subject,
     property: Option<Subject>,
@@ -45,11 +46,13 @@ pub enum UnificationInstruction {
     subject: Subject,
   },
 
-  // Tracing instructions
-  TraceBindVariable {
+  // Variable instructions
+  BindVariable {
     variable: usize,
     binding: Subject,
   },
+
+  // Tracing instructions
   TraceStartFact {
     constraint: usize,
     fact: usize,

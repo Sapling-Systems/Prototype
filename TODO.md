@@ -1,6 +1,7 @@
 # IN PROGRESS
 
 - Concept for built-in functions
+- Query watch
 
 # TODO
 
@@ -8,6 +9,7 @@
 - IDE UI: Structure Editor
 - Meta: Multiple same properties / ALL meta
 - Meta: Scope meta
+- custom Reusables / functions
 - IDE UI: View/Container
 - Sapling UI Framework
 - IDE UI: Data table

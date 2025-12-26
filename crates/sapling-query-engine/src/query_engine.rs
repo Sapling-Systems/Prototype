@@ -1,4 +1,4 @@
-use sapling_data_model::{Query, Subject};
+use sapling_data_model::{Fact, Query, Subject};
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use crate::{
@@ -10,6 +10,7 @@ use crate::{
   meta::QueryMeta,
   variable_allocator::VariableAllocator,
   variable_bank::VariableBank,
+  watcher::QueryWatcher,
 };
 
 pub struct QueryEngine {
@@ -19,6 +20,53 @@ pub struct QueryEngine {
 impl QueryEngine {
   pub fn new(database: Arc<Database>) -> Self {
     Self { database }
+  }
+
+  fn get_evaluated_query(&self, query: &Query, enforced_precedence: &[usize]) -> EvaluatedQuery {
+    let mut target_subject: Option<&Subject> = None;
+    let mut constraints = Vec::new();
+
+    for (fact_index, fact) in self.database.iter_naive_facts() {
+      if fact.subject.evaluated {
+        // TODO: Lookup this subject to figure out if it evaluates to currently looked for subject
+        continue;
+      }
+
+      // Must match subject
+      if !match_subject(&fact.subject.subject, &query.subject) {
+        continue;
+      }
+
+      // Skip meta facts
+      if match_subject(&fact.meta, &System::CORE_META) {
+        continue;
+      }
+
+      // Change query target
+      if match_subject(&fact.property.subject, &System::CORE_QUERY_TARGET) {
+        target_subject = Some(&fact.value.subject);
+        continue;
+      }
+
+      // Ignore non-query operators
+      if match_subject(&fact.operator, &System::CORE_OPERATOR_IS) {
+        continue;
+      }
+
+      constraints.push((fact_index, constraints.len(), fact));
+    }
+
+    constraints.sort_unstable_by_key(|&(_, index, _)| {
+      enforced_precedence
+        .iter()
+        .position(|&i| i == index)
+        .unwrap_or(index + 100)
+    });
+
+    EvaluatedQuery {
+      constraints,
+      target_subject,
+    }
   }
 
   fn build_evaluation_instructions(
@@ -63,17 +111,12 @@ impl QueryEngine {
       return instructions;
     }
 
-    let target_facts = self.database.get_facts_for_subject(
-      &query.subject,
-      &meta,
-      !query.evaluated,
-      target_facts_precedence,
-    );
+    let evaluated_query = self.get_evaluated_query(query, target_facts_precedence);
 
     let mut instructions = Vec::new();
     let query_name = System::get_subject_name(&self.database, &query.subject);
 
-    if target_facts.is_empty() {
+    if evaluated_query.constraints.is_empty() {
       if skip_empty {
         return instructions;
       }
@@ -100,7 +143,7 @@ impl QueryEngine {
     }
 
     if let Some(_explain) = explain {
-      for (fact_index, query_fact_index, _) in &target_facts {
+      for (fact_index, query_fact_index, _) in &evaluated_query.constraints {
         instructions.push(UnificationInstruction::TraceConstraintCreate {
           constraint: *query_fact_index,
           fact_index: *fact_index,
@@ -112,19 +155,29 @@ impl QueryEngine {
       preset_subject_variable.unwrap_or_else(|| variable_allocator.allocate_raw_variable());
 
     let mut trace_bound = false;
-    for (_, query_fact_index, query_fact) in target_facts.into_iter() {
+    let mut forced_subject = false;
+
+    for (_, query_fact_index, query_fact) in evaluated_query.constraints.into_iter() {
       let fact_string = System::get_human_readable_fact(&self.database, query_fact);
       instructions.push(UnificationInstruction::AllocateFrame { size: 64 });
       instructions.push(UnificationInstruction::DebugComment {
         comment: format!("Frame for [{}]", fact_string),
       });
 
+      if !forced_subject && let Some(query_target) = evaluated_query.target_subject {
+        instructions.push(UnificationInstruction::BindVariable {
+          variable: subject_variable,
+          binding: query_target.clone(),
+        });
+        forced_subject = true;
+      }
+
       if let Some(explain) = explain
         && !trace_bound
       {
         if let Some(target_subject) = &explain.target_subject {
           trace_bound = true;
-          instructions.push(UnificationInstruction::TraceBindVariable {
+          instructions.push(UnificationInstruction::BindVariable {
             variable: subject_variable,
             binding: target_subject.clone(),
           });
@@ -156,9 +209,15 @@ impl QueryEngine {
         instructions.push(UnificationInstruction::MaybeYield);
       }
       if !match_subject(&query_fact.property.subject, &System::CORE_WILDCARD_SUBJECT) {
-        instructions.push(UnificationInstruction::CheckProperty {
-          property: query_fact.property.subject.clone(),
-        });
+        if query_fact.property.evaluated
+          && match_subject(&query_fact.property.subject, &System::CORE_INTEGER_PROPERTY)
+        {
+          instructions.push(UnificationInstruction::CheckPropertyConstAnyInteger);
+        } else {
+          instructions.push(UnificationInstruction::CheckProperty {
+            property: query_fact.property.subject.clone(),
+          });
+        }
       }
 
       if query_fact.value.evaluated {
@@ -309,4 +368,10 @@ impl QueryEngine {
 
     self.explain_raw(&query, bank, allocator)
   }
+}
+
+#[derive(Debug)]
+struct EvaluatedQuery<'a> {
+  constraints: Vec<(usize, usize, &'a Fact)>,
+  target_subject: Option<&'a Subject>,
 }

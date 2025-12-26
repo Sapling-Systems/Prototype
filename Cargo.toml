@@ -1,6 +1,14 @@
 [workspace]
 resolver = "3"
-members = ["apps/ide", "apps/spec-validator","crates/sapling-data-model", "crates/sapling-query-engine"]
+members = [
+    "apps/ide",
+    "apps/spec-validator",
+    "crates/sapling-data-model",
+    "crates/sapling-query-engine",
+    "crates/sapling-func-macro",
+    "crates/sapling-func",
+    "crates/sapling-std"
+]
 
 [workspace.package]
 version = "0.0.1"
@@ -9,5 +17,8 @@ edition = "2024"
 
 [workspace.dependencies]
 sapling-data-model = { path = "crates/sapling-data-model" }
+sapling-func-macro = { path = "crates/sapling-func-macro" }
+sapling-func = { path = "crates/sapling-func" }
+sapling-std = { path = "crates/sapling-std" }
 sapling-query-engine = { path = "crates/sapling-query-engine" }
 itertools = "0.14.0"

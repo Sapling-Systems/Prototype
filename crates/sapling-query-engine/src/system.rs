@@ -1,8 +1,16 @@
+use std::{
+  collections::HashMap,
+  sync::{LazyLock, Mutex},
+};
+
 use sapling_data_model::{Fact, Subject, SubjectSelector};
 
 use crate::{Database, database::match_subject};
 
 pub struct System;
+
+static CORE_PROPERTY_NAME_MAP: LazyLock<Mutex<HashMap<String, Subject>>> =
+  LazyLock::new(|| Mutex::new(HashMap::new()));
 
 impl System {
   pub const CORE_META: Subject = Subject::Static { uuid: 0 };
@@ -12,8 +20,8 @@ impl System {
   pub const CORE_PROPERTY_META_ENTRY: Subject = Subject::Static { uuid: 4 };
   pub const CORE_META_INCLUDE: Subject = Subject::Static { uuid: 5 };
   pub const CORE_WILDCARD_SUBJECT: Subject = Subject::Static { uuid: 6 };
-
-  pub const CORE_SUBJECT_COUNT: usize = 7;
+  pub const CORE_INTEGER_PROPERTY: Subject = Subject::Static { uuid: 7 };
+  pub const CORE_QUERY_TARGET: Subject = Subject::Static { uuid: 8 };
 
   pub(crate) fn install(database: &mut Database) {
     Self::add_core_subject(database, "Core Metadata");
@@ -23,9 +31,22 @@ impl System {
     Self::add_core_subject(database, "Meta Entry");
     Self::add_core_subject(database, "Meta Core Included");
     Self::add_core_subject(database, "*");
+    Self::add_core_subject(database, "SystemIntegerProperty");
+    Self::add_core_subject(database, "SystemQueryTarget");
+  }
+
+  pub fn get_named_subject(name: &str) -> Option<Subject> {
+    let map = CORE_PROPERTY_NAME_MAP.lock().unwrap();
+    map.get(name).cloned()
   }
 
   pub(crate) fn get_subject_name(database: &Database, subject: &Subject) -> Option<String> {
+    match subject {
+      Subject::Integer { value } => return Some(value.to_string()),
+      Subject::Float { value } => return Some(value.to_string()),
+      _ => {}
+    };
+
     database
       .raw
       .iter()
@@ -82,6 +103,10 @@ impl System {
       },
       meta: Self::CORE_META.clone(),
     });
+
+    // Register
+    let mut property_map = CORE_PROPERTY_NAME_MAP.lock().unwrap();
+    property_map.insert(name.to_string(), subject.clone());
 
     subject
   }

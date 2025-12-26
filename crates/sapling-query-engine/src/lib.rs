@@ -8,6 +8,7 @@ mod query_engine;
 mod system;
 mod variable_allocator;
 mod variable_bank;
+mod watcher;
 
 pub use database::Database;
 pub use explain::{

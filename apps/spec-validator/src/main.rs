@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use clap::Parser as ClapParser;
 use colored::*;
 use sapling_data_model::{Fact, Query, Subject};
 use sapling_query_engine::{
@@ -13,6 +14,15 @@ use std::{fs, rc::Rc};
 
 mod parser;
 use parser::{SubjectRegistry, TestLine};
+
+#[derive(ClapParser, Debug)]
+#[command(name = "spec-validator")]
+#[command(about = "Validate Sapling query engine specifications")]
+struct Args {
+  /// Update test files with actual output when differences are found
+  #[arg(short = 'u', long = "update")]
+  update: bool,
+}
 
 const MEMORY_BANK_SIZE: usize = 128;
 
@@ -89,6 +99,7 @@ fn print_diff(expected: &[String], actual: &[String]) {
     }
   }
 }
+const FACT_INDEX_OFFSET: usize = 8;
 
 fn format_explain_result(
   engine: &QueryEngine,
@@ -128,9 +139,18 @@ fn format_explain_result(
         let fact = database.get_fact(*fact_id);
         if let Some(fact) = fact {
           let fact_str = format_fact(engine, fact);
-          lines.push(format!("Fact{}: {} [{}]", constraint_id, fact_id, fact_str));
+          lines.push(format!(
+            "Fact{}: {} [{}]",
+            constraint_id,
+            fact_id - FACT_INDEX_OFFSET,
+            fact_str
+          ));
         } else {
-          lines.push(format!("Fact{}: {} [unknown]", constraint_id, fact_id));
+          lines.push(format!(
+            "Fact{}: {} [unknown]",
+            constraint_id,
+            fact_id - FACT_INDEX_OFFSET
+          ));
         }
       }
       ExplainFactEvent::YieldingFact {
@@ -144,7 +164,7 @@ fn format_explain_result(
           lines.push(format!(
             "Yielded for Fact{}: {} [{}]{}",
             constraint_id,
-            fact_id,
+            fact_id - FACT_INDEX_OFFSET,
             fact_str,
             if let Some(subject_variable) = subject_variable {
               format!(" (subject: {})", format_subject(engine, subject_variable))
@@ -155,7 +175,8 @@ fn format_explain_result(
         } else {
           lines.push(format!(
             "Yielded for Fact{}: {} [unknown]",
-            constraint_id, fact_id
+            constraint_id,
+            fact_id - FACT_INDEX_OFFSET
           ));
         }
       }

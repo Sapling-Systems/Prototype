@@ -433,6 +433,29 @@ impl<'a> AbstractMachine<'a> {
           reset_frame = true;
         }
       }
+      UnificationInstruction::CheckPropertyConstAnyInteger => {
+        let frame = self.stack.last_mut().unwrap();
+        let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
+
+        let non_value: Option<Subject> = None;
+
+        tracing_constraint_check!(
+          self,
+          frame,
+          created_trace_event,
+          Property,
+          non_value,
+          fact.property.subject,
+          EvaluationType::Check
+        );
+
+        match fact.property.subject {
+          Subject::Integer { .. } => {}
+          _ => {
+            reset_frame = true;
+          }
+        }
+      }
       UnificationInstruction::CheckValue { value, property } => {
         let frame = self.stack.last_mut().unwrap();
         let fact = frame.current_investigated_fact.as_ref().unwrap().fact;
@@ -525,7 +548,7 @@ impl<'a> AbstractMachine<'a> {
           .push((*constraint, *fact_index));
         self.fallback_instruction_pointer += 1;
       }
-      UnificationInstruction::TraceBindVariable { variable, binding } => {
+      UnificationInstruction::BindVariable { variable, binding } => {
         if *variable == 0 {
           self.explain_result.subject = Some(binding.clone());
         }

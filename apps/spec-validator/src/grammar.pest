@@ -22,7 +22,7 @@ subject          = { boolean | float | integer | string | fact_ref_identifier | 
 // Subject selectors
 evaluated_marker   = { "?" }
 property_separator = { "/" }
-subject_selector   = { evaluated_marker? ~ subject ~ (property_separator ~ subject)? }
+subject_selector   = { evaluated_marker? ~ subject ~ (property_separator ~ #property = evaluated_marker? ~ subject)? }
 
 // Assignment operator
 operator            = _{ equals_operator | assignment_operator }
