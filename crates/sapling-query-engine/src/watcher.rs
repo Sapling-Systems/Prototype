@@ -1,10 +1,12 @@
-use std::fmt::Debug;
+use std::{
+  fmt::Debug,
+  hash::{DefaultHasher, Hash, Hasher},
+};
 
-use sapling_data_model::{Fact, Query};
+use sapling_data_model::{Query, SubjectSelector};
 
 use crate::{
-  Database, QueryEngine, SharedVariableAllocator, SharedVariableBank,
-  instructions::UnificationInstruction, machine::AbstractMachine,
+  Database, QueryEngine, SharedVariableAllocator, SharedVariableBank, machine::AbstractMachine,
 };
 
 pub trait QueryWatcher: Debug {
@@ -14,42 +16,71 @@ pub trait QueryWatcher: Debug {
 
 #[derive(Debug)]
 struct SingleWatcher {
-  check_instructions: Vec<UnificationInstruction>,
+  root_query: Query,
+  last_hash: u64,
   watcher: Box<dyn QueryWatcher>,
 }
 
 impl Clone for SingleWatcher {
   fn clone(&self) -> Self {
     SingleWatcher {
-      check_instructions: self.check_instructions.clone(),
+      root_query: self.root_query.clone(),
+      last_hash: self.last_hash,
       watcher: self.watcher.box_clone(),
     }
   }
 }
 
 impl SingleWatcher {
-  fn new<T: QueryWatcher + 'static>(
-    query: &Query,
-    database: &Database,
-    query_engine: &QueryEngine,
-    variable_allocator: SharedVariableAllocator,
-    watcher: T,
-  ) -> Self {
-    let instructions = query_engine.build_evaluation_instructions(
-      database,
-      query,
-      true,
-      &[],
-      None,
-      false,
-      variable_allocator,
-      None,
-      Some(1),
-    );
+  fn generate_result_hash(fact_ids: &[usize]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    fact_ids.hash(&mut hasher);
+    hasher.finish()
+  }
+
+  fn new<T: QueryWatcher + 'static>(query: &Query, watcher: T) -> Self {
+    let last_hash = Self::generate_result_hash(&[]);
 
     SingleWatcher {
-      check_instructions: instructions,
+      root_query: query.clone(),
+      last_hash,
       watcher: Box::new(watcher),
+    }
+  }
+
+  fn recursive_gather_dependencies(
+    database: &Database,
+    query_engine: &QueryEngine,
+    variable_bank: SharedVariableBank,
+    variable_allocator: SharedVariableAllocator,
+    query: &Query,
+    result: &mut Vec<usize>,
+  ) {
+    let machine = query_engine.query(
+      database,
+      query,
+      variable_bank.clone(),
+      variable_allocator.clone(),
+    );
+    for fact in machine {
+      result.push(fact.fact_index);
+      println!("Found fact {:#?}", fact);
+
+      if fact.fact.value.evaluated {
+        Self::recursive_gather_dependencies(
+          database,
+          query_engine,
+          variable_bank.clone(),
+          variable_allocator.clone(),
+          &Query {
+            evaluated: fact.fact.value.evaluated,
+            property: fact.fact.value.property.clone(),
+            subject: fact.fact.value.subject.clone(),
+            meta: None,
+          },
+          result,
+        );
+      }
     }
   }
 
@@ -59,27 +90,23 @@ impl SingleWatcher {
     query_engine: &QueryEngine,
     variable_bank: SharedVariableBank,
     variable_allocator: SharedVariableAllocator,
-    new_fact_index: usize,
+    _new_fact_index: usize,
   ) {
-    let mut instructions = self.check_instructions.clone();
-    for instruction in &mut instructions {
-      match instruction {
-        UnificationInstruction::AllocateFact { fact_index, .. } => {
-          *fact_index = new_fact_index;
-        }
-        _ => {}
-      }
-    }
-
-    let mut machine = AbstractMachine::new(
-      instructions,
+    let mut fact_ids = Vec::new();
+    Self::recursive_gather_dependencies(
       database,
       query_engine,
       variable_bank.clone(),
-      variable_allocator,
+      variable_allocator.clone(),
+      &self.root_query,
+      &mut fact_ids,
     );
-    if machine.next().is_some() {
+    let hash = Self::generate_result_hash(&fact_ids);
+    println!("Fact IDs: {:?}, Hash: {:x}", fact_ids, hash);
+
+    if hash != self.last_hash {
       self.watcher.on_change();
+      self.last_hash = hash;
     }
 
     variable_bank.truncate_checkpoint(0);
@@ -98,15 +125,8 @@ impl DatabaseWatcher {
     }
   }
 
-  pub fn watch<'a, T: QueryWatcher + 'static>(
-    &'a mut self,
-    database: &Database,
-    query_engine: &QueryEngine,
-    query: &Query,
-    watcher: T,
-    allocator: SharedVariableAllocator,
-  ) {
-    let watcher = SingleWatcher::new(query, database, query_engine, allocator, watcher);
+  pub fn watch<'a, T: QueryWatcher + 'static>(&'a mut self, query: &Query, watcher: T) {
+    let watcher = SingleWatcher::new(query, watcher);
     self.watchers.push(watcher);
   }
 
@@ -175,6 +195,20 @@ mod tests {
       },
     });
 
+    let mut watcher = DatabaseWatcher::new();
+    let query_engine = QueryEngine::new();
+    let variable_allocator = SharedVariableAllocator::new();
+    let variable_bank = SharedVariableBank::new(128);
+
+    let query = Query {
+      evaluated: true,
+      meta: None,
+      property: None,
+      subject: query,
+    };
+    watcher.watch(&query, TestWatcher);
+    assert_eq!(CHANGE_COUNT.load(Ordering::Relaxed), 0);
+
     let data1 = database.new_static_subject();
     let fact1 = database.add_fact(Fact {
       meta: System::CORE_META.clone(),
@@ -198,6 +232,16 @@ mod tests {
       },
     });
 
+    println!("Handle fact 1");
+    watcher.handle_new_fact(
+      &database,
+      &query_engine,
+      variable_bank.clone(),
+      variable_allocator.clone(),
+      fact1,
+    );
+    assert_eq!(CHANGE_COUNT.load(Ordering::Relaxed), 0);
+
     let data2 = database.new_static_subject();
     let fact2 = database.add_fact(Fact {
       meta: System::CORE_META.clone(),
@@ -220,38 +264,6 @@ mod tests {
         property: None,
       },
     });
-
-    let query = Query {
-      evaluated: true,
-      meta: None,
-      property: None,
-      subject: query,
-    };
-
-    let mut watcher = DatabaseWatcher::new();
-    let query_engine = QueryEngine::new();
-    let variable_allocator = SharedVariableAllocator::new();
-    let variable_bank = SharedVariableBank::new(128);
-    watcher.watch(
-      &database,
-      &query_engine,
-      &query,
-      TestWatcher,
-      variable_allocator.clone(),
-    );
-
-    assert_eq!(CHANGE_COUNT.load(Ordering::Relaxed), 0);
-
-    println!("Handle fact 1");
-    watcher.handle_new_fact(
-      &database,
-      &query_engine,
-      variable_bank.clone(),
-      variable_allocator.clone(),
-      fact1,
-    );
-
-    assert_eq!(CHANGE_COUNT.load(Ordering::Relaxed), 0);
 
     println!("Handle fact 2");
     watcher.handle_new_fact(
