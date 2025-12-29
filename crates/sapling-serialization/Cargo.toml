@@ -1,0 +1,12 @@
+[package]
+name = "sapling-serialization"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+sapling-data-model.workspace= true
+sapling-serialization-macro.workspace= true
+
+[dev-dependencies]
+sapling-query-engine.workspace = true

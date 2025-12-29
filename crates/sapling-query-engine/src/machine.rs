@@ -43,7 +43,7 @@ pub struct AbstractMachine<'a> {
   pub instructions: Vec<UnificationInstruction>,
   fallback_instruction_pointer: usize,
   database: &'a Database,
-  query_engine: &'a QueryEngine,
+  query_engine: QueryEngine,
   stack: Vec<SearchFrame<'a>>,
   yielded: VecDeque<FoundFact<'a>>,
   follow_evaluated_subjects: bool,
@@ -65,7 +65,7 @@ impl<'a> AbstractMachine<'a> {
   pub fn new(
     instructions: Vec<UnificationInstruction>,
     database: &'a Database,
-    query_engine: &'a QueryEngine,
+    query_engine: QueryEngine,
     variable_bank: SharedVariableBank,
     variable_allocator: SharedVariableAllocator,
   ) -> Self {

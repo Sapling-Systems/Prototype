@@ -1,6 +1,0 @@
-[package]
-name = "sapling-func-macro"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]

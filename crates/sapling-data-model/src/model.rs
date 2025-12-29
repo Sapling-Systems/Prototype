@@ -6,6 +6,17 @@ pub enum Subject {
   String { value: String },
 }
 
+impl Subject {
+  pub fn type_name(&self) -> &'static str {
+    match self {
+      Subject::Static { .. } => "static",
+      Subject::Integer { .. } => "integer",
+      Subject::Float { .. } => "float",
+      Subject::String { .. } => "string",
+    }
+  }
+}
+
 #[derive(Clone, Debug)]
 pub struct SubjectSelector {
   /// The target subject

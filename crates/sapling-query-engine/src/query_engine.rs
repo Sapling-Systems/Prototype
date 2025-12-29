@@ -13,6 +13,7 @@ use crate::{
   watcher::QueryWatcher,
 };
 
+#[derive(Clone)]
 pub struct QueryEngine;
 
 impl QueryEngine {
@@ -309,7 +310,7 @@ impl QueryEngine {
   }
 
   pub fn query<'a>(
-    &'a self,
+    &self,
     database: &'a Database,
     query: &Query,
     bank: SharedVariableBank,
@@ -326,7 +327,7 @@ impl QueryEngine {
       None,
       None,
     );
-    AbstractMachine::new(instructions, database, self, bank, allocator)
+    AbstractMachine::new(instructions, database, self.clone(), bank, allocator)
   }
 
   fn explain_raw(
@@ -356,7 +357,7 @@ impl QueryEngine {
       None,
     );
 
-    let mut machine = AbstractMachine::new(instructions, &database, &self, bank, allocator);
+    let mut machine = AbstractMachine::new(instructions, &database, self.clone(), bank, allocator);
     //machine.log_instructions = true;
     while machine.next().is_some() {}
 

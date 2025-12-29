@@ -22,6 +22,7 @@ impl System {
   pub const CORE_WILDCARD_SUBJECT: Subject = Subject::Static { uuid: 6 };
   pub const CORE_INTEGER_PROPERTY: Subject = Subject::Static { uuid: 7 };
   pub const CORE_QUERY_TARGET: Subject = Subject::Static { uuid: 8 };
+  pub const CORE_SERIALIZATION_SOURCE: Subject = Subject::Static { uuid: 9 };
 
   pub(crate) fn install(database: &mut Database) {
     Self::add_core_subject(database, "Core Metadata");
@@ -33,6 +34,7 @@ impl System {
     Self::add_core_subject(database, "*");
     Self::add_core_subject(database, "SystemIntegerProperty");
     Self::add_core_subject(database, "SystemQueryTarget");
+    Self::add_core_subject(database, "SystemSerializationSource");
   }
 
   pub fn get_named_subject(name: &str) -> Option<Subject> {
@@ -40,7 +42,7 @@ impl System {
     map.get(name).cloned()
   }
 
-  pub(crate) fn get_subject_name(database: &Database, subject: &Subject) -> Option<String> {
+  pub fn get_subject_name(database: &Database, subject: &Subject) -> Option<String> {
     match subject {
       Subject::Integer { value } => return Some(value.to_string()),
       Subject::Float { value } => return Some(value.to_string()),
@@ -60,7 +62,35 @@ impl System {
       })
   }
 
-  pub(crate) fn get_human_readable_fact(database: &Database, fact: &Fact) -> String {
+  pub fn new_named_static(database: &mut Database, name: &str) -> Subject {
+    let subject = database.new_static_subject();
+    database.add_fact(Fact {
+      subject: SubjectSelector {
+        evaluated: false,
+        subject: subject.clone(),
+        property: None,
+      },
+      property: SubjectSelector {
+        subject: System::CORE_PROPERTY_SUBJECT_NAME.clone(),
+        evaluated: false,
+        property: None,
+      },
+      meta: Subject::String {
+        value: "default".to_string(),
+      },
+      operator: System::CORE_OPERATOR_IS.clone(),
+      value: SubjectSelector {
+        subject: Subject::String {
+          value: name.to_string(),
+        },
+        evaluated: false,
+        property: None,
+      },
+    });
+    subject
+  }
+
+  pub fn get_human_readable_fact(database: &Database, fact: &Fact) -> String {
     format!(
       "{}{}/{} {} {}",
       if fact.subject.evaluated { "?" } else { "" },

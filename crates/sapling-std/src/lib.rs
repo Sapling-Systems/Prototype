@@ -29,4 +29,6 @@ fn explain(
     facts: Vec<usize>,
 ) -> ExplainResult {}
 
+#[derive(SaplingSerialize, SaplingDeserialize)]
+
 */
