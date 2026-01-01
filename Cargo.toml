@@ -7,6 +7,7 @@ members = [
     "crates/sapling-query-engine",
     "crates/sapling-serialization-macro",
     "crates/sapling-serialization",
+    "crates/sapling-app",
     "crates/sapling-std",
 ]
 
@@ -19,6 +20,7 @@ edition = "2024"
 sapling-data-model = { path = "crates/sapling-data-model" }
 sapling-serialization-macro = { path = "crates/sapling-serialization-macro" }
 sapling-serialization = { path = "crates/sapling-serialization" }
+sapling-app = { path = "crates/sapling-app" }
 sapling-std = { path = "crates/sapling-std" }
 sapling-query-engine = { path = "crates/sapling-query-engine" }
 itertools = "0.14.0"

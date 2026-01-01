@@ -100,9 +100,13 @@ impl QueryEngine {
       });
 
       if let Some(property) = &query.property {
-        instructions.push(UnificationInstruction::CheckProperty {
-          property: property.clone(),
-        });
+        if match_subject(property, &System::CORE_INTEGER_PROPERTY) {
+          instructions.push(UnificationInstruction::CheckPropertyConstAnyInteger);
+        } else {
+          instructions.push(UnificationInstruction::CheckProperty {
+            property: property.clone(),
+          });
+        }
       }
 
       if !meta.include_system_meta {

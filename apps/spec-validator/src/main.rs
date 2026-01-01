@@ -1,16 +1,12 @@
 use anyhow::{Context, Result};
 use clap::Parser as ClapParser;
 use colored::*;
+use sapling_app::App;
 use sapling_data_model::{Fact, Query, Subject};
-use sapling_query_engine::{
-  Database, DatabaseWatcher, EvaluationType, ExplainConstraintEvaluationOutcome, FoundFact,
-  QueryEngine, SharedVariableAllocator, SharedVariableBank, System,
-};
+use sapling_query_engine::{EvaluationType, ExplainConstraintEvaluationOutcome, FoundFact, System};
 use similar::{ChangeTag, TextDiff};
-use std::cell::RefCell;
+use std::fs;
 use std::path::Path;
-use std::sync::Arc;
-use std::{fs, rc::Rc};
 
 mod parser;
 use parser::{SubjectRegistry, TestLine};
@@ -27,9 +23,12 @@ struct Args {
 const MEMORY_BANK_SIZE: usize = 128;
 
 fn resolve_fact_references(
-  database: &mut sapling_query_engine::Database,
+  app: &mut App,
   fact_identifiers: &std::collections::HashMap<String, usize>,
 ) {
+  // Get mutable access to the database
+  let database = app.get_raw_database_mut();
+
   // Iterate through all facts and resolve @identifier references
   for fact in database.facts_mut() {
     // Helper to resolve a subject if it's a fact reference
@@ -101,19 +100,16 @@ fn print_diff(expected: &[String], actual: &[String]) {
 }
 const FACT_INDEX_OFFSET: usize = 8;
 
-fn format_explain_result(
-  engine: &QueryEngine,
-  database: &sapling_query_engine::Database,
-  result: &sapling_query_engine::ExplainResult,
-) -> Vec<String> {
+fn format_explain_result(app: &App, result: &sapling_query_engine::ExplainResult) -> Vec<String> {
   let mut lines = Vec::new();
+  let database = app.get_raw_database();
 
   // Format constraints
   for (idx, (constraint_id, fact_id)) in result.constraints.iter().enumerate() {
     // Get the constraint fact from the database
     let fact = database.get_fact(*fact_id);
     if let Some(fact) = fact {
-      let fact_str = format_fact(database, engine, fact);
+      let fact_str = format_fact(app, fact);
       lines.push(format!(
         "Constraint{}: {} [{}]",
         idx, constraint_id, fact_str
@@ -125,10 +121,7 @@ fn format_explain_result(
 
   // Format subject
   if let Some(subject) = &result.subject {
-    lines.push(format!(
-      "Subject: {}",
-      format_subject(database, engine, subject)
-    ));
+    lines.push(format!("Subject: {}", format_subject(app, subject)));
   }
 
   // Format fact events
@@ -141,7 +134,7 @@ fn format_explain_result(
       } => {
         let fact = database.get_fact(*fact_id);
         if let Some(fact) = fact {
-          let fact_str = format_fact(database, engine, fact);
+          let fact_str = format_fact(app, fact);
           lines.push(format!(
             "Fact{}: {} [{}]",
             constraint_id,
@@ -163,17 +156,14 @@ fn format_explain_result(
       } => {
         let fact = database.get_fact(*fact_id);
         if let Some(fact) = fact {
-          let fact_str = format_fact(database, engine, fact);
+          let fact_str = format_fact(app, fact);
           lines.push(format!(
             "Yielded for Fact{}: {} [{}]{}",
             constraint_id,
             fact_id - FACT_INDEX_OFFSET,
             fact_str,
             if let Some(subject_variable) = subject_variable {
-              format!(
-                " (subject: {})",
-                format_subject(database, engine, subject_variable)
-              )
+              format!(" (subject: {})", format_subject(app, subject_variable))
             } else {
               String::new()
             }
@@ -199,8 +189,8 @@ fn format_explain_result(
         lines.push(format!(
           "Fact{}: Evaluating SubQuery ?{} yields {} => {}",
           constraint_id,
-          format_subject(database, engine, target_query),
-          format_subject(database, engine, target),
+          format_subject(app, target_query),
+          format_subject(app, target),
           outcome
         ));
       }
@@ -224,10 +214,10 @@ fn format_explain_result(
             lines.push(format!(
               "Fact{}: Subject {} {} {} => {}{}",
               constraint_id,
-              format_subject(database, engine, actual),
-              format_subject(database, engine, operator),
+              format_subject(app, actual),
+              format_subject(app, operator),
               if let Some(target) = target {
-                format_subject(database, engine, target)
+                format_subject(app, target)
               } else {
                 "~unset~".to_string()
               },
@@ -251,10 +241,10 @@ fn format_explain_result(
             lines.push(format!(
               "Fact{}: Property {} {} {} => {}",
               constraint_id,
-              format_subject(database, engine, actual),
-              format_subject(database, engine, operator),
+              format_subject(app, actual),
+              format_subject(app, operator),
               if let Some(target) = target {
-                format_subject(database, engine, target)
+                format_subject(app, target)
               } else {
                 "~unset~".to_string()
               },
@@ -273,10 +263,10 @@ fn format_explain_result(
             lines.push(format!(
               "Fact{}: Operator {} {} {} => {}{}",
               constraint_id,
-              format_subject(database, engine, actual),
-              format_subject(database, engine, operator),
+              format_subject(app, actual),
+              format_subject(app, operator),
               if let Some(target) = target {
-                format_subject(database, engine, target)
+                format_subject(app, target)
               } else {
                 "~unset~".to_string()
               },
@@ -300,10 +290,10 @@ fn format_explain_result(
             lines.push(format!(
               "Fact{}: Value {} {} {} => {}{}",
               constraint_id,
-              format_subject(database, engine, actual),
-              format_subject(database, engine, operator),
+              format_subject(app, actual),
+              format_subject(app, operator),
               if let Some(target) = target {
-                format_subject(database, engine, target)
+                format_subject(app, target)
               } else {
                 "~unset~".to_string()
               },
@@ -328,31 +318,23 @@ fn format_explain_result(
     lines.push(format!(
       "Unification Variable {} = {}",
       variable,
-      format_subject(database, engine, value)
+      format_subject(app, value)
     ));
   }
 
   lines
 }
 
-fn format_subject(database: &Database, engine: &QueryEngine, subject: &Subject) -> String {
+fn format_subject(app: &App, subject: &Subject) -> String {
   match subject {
     Subject::Static { uuid } => {
-      let bank = SharedVariableBank::new(MEMORY_BANK_SIZE);
-      let allocator = SharedVariableAllocator::new();
-
-      let name = engine
-        .query(
-          database,
-          &Query {
-            subject: subject.clone(),
-            property: Some(System::CORE_PROPERTY_SUBJECT_NAME),
-            meta: Some(System::CORE_META_INCLUDE),
-            evaluated: false,
-          },
-          bank,
-          allocator,
-        )
+      let name = app
+        .query_once(&Query {
+          subject: subject.clone(),
+          property: Some(System::CORE_PROPERTY_SUBJECT_NAME),
+          meta: Some(System::CORE_META_INCLUDE),
+          evaluated: false,
+        })
         .next();
 
       if let Some(Subject::String { value }) = name.map(|fact| &fact.fact.value.subject) {
@@ -367,40 +349,34 @@ fn format_subject(database: &Database, engine: &QueryEngine, subject: &Subject) 
   }
 }
 
-fn format_fact(database: &Database, engine: &QueryEngine, fact: &Fact) -> String {
+fn format_fact(app: &App, fact: &Fact) -> String {
   let subject_str = if fact.subject.evaluated {
-    format!(
-      "?{}",
-      format_subject(database, engine, &fact.subject.subject)
-    )
+    format!("?{}", format_subject(app, &fact.subject.subject))
   } else {
-    format_subject(database, engine, &fact.subject.subject)
+    format_subject(app, &fact.subject.subject)
   };
 
   let property_str = if fact.property.evaluated {
-    format!(
-      "?{}",
-      format_subject(database, engine, &fact.property.subject)
-    )
+    format!("?{}", format_subject(app, &fact.property.subject))
   } else {
-    format_subject(database, engine, &fact.property.subject)
+    format_subject(app, &fact.property.subject)
   };
 
   let mut value_str = if fact.value.evaluated {
-    format!("?{}", format_subject(database, engine, &fact.value.subject))
+    format!("?{}", format_subject(app, &fact.value.subject))
   } else {
-    format_subject(database, engine, &fact.value.subject)
+    format_subject(app, &fact.value.subject)
   };
 
   if let Some(value_property) = &fact.value.property {
-    value_str += &format!("/{}", format_subject(database, engine, value_property));
+    value_str += &format!("/{}", format_subject(app, value_property));
   }
 
   format!(
     "{}/{} {} {}",
     subject_str,
     property_str,
-    format_subject(database, engine, &fact.operator),
+    format_subject(app, &fact.operator),
     value_str
   )
 }
@@ -498,8 +474,12 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
 
   let (mut database, mut fact_identifiers) = registry.into_database();
 
-  let engine = QueryEngine::new();
-  let mut watcher = DatabaseWatcher::new();
+  let mut app = App::new(MEMORY_BANK_SIZE);
+
+  // Transfer facts from registry database to app
+  for fact in database.facts_mut().drain(..) {
+    app.add_fact(fact);
+  }
 
   let mut success = true;
   let mut query_count = 0;
@@ -509,14 +489,7 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
   for line in test_case.lines {
     match line {
       TestLine::Fact(fact, fact_identifier) => {
-        let fact_id = database.add_fact(fact);
-        watcher.handle_new_fact(
-          &database,
-          &engine,
-          SharedVariableBank::new(MEMORY_BANK_SIZE),
-          SharedVariableAllocator::new(),
-          fact_id,
-        );
+        let fact_id = app.add_fact(fact);
 
         if let Some(identifier) = fact_identifier {
           fact_identifiers.insert(identifier, fact_id);
@@ -524,7 +497,7 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
       }
       TestLine::Query(query) => {
         // Resolve fact references before running queries
-        resolve_fact_references(&mut database, &fact_identifiers);
+        resolve_fact_references(&mut app, &fact_identifiers);
 
         query_count += 1;
 
@@ -533,30 +506,21 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
           "Query".green().bold(),
           query_count,
           if query.subject_evaluated { "?" } else { "" },
-          format_subject(&database, &engine, &query.subject),
+          format_subject(&app, &query.subject),
           match &query.property {
-            Some(subject) => format!("/{}", format_subject(&database, &engine, subject)),
+            Some(subject) => format!("/{}", format_subject(&app, subject)),
             None => "".to_string(),
           }
         );
 
-        let bank = SharedVariableBank::new(MEMORY_BANK_SIZE);
-        let allocator = SharedVariableAllocator::new();
-
-        let mut machine = engine.query(
-          &database,
-          &Query {
+        let actual_facts: Vec<FoundFact> = app
+          .query_once(&Query {
             evaluated: query.subject_evaluated,
             meta: None,
             property: query.property.clone(),
             subject: query.subject.clone(),
-          },
-          bank,
-          allocator,
-        );
-        //println!("Instructions: {:#?}", machine.instructions);
-        //machine.log_instructions = true;
-        let actual_facts: Vec<FoundFact> = machine.collect();
+          })
+          .collect();
 
         println!(
           "  {} ({} facts)",
@@ -564,12 +528,12 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
           query.expected_facts.len()
         );
         for expected in &query.expected_facts {
-          let fact_str = format_fact(&database, &engine, &expected.fact);
+          let fact_str = format_fact(&app, &expected.fact);
           if let Some(subject_mapping) = &expected.subject_mapping {
             println!(
               "    {} ;; subject={}",
               fact_str,
-              format_subject(&database, &engine, subject_mapping),
+              format_subject(&app, subject_mapping),
             );
           } else {
             println!("    {}", fact_str);
@@ -578,12 +542,12 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
 
         println!("  {} ({} facts)", "Actual:".cyan(), actual_facts.len());
         for found_fact in &actual_facts {
-          let fact_str = format_fact(&database, &engine, found_fact.fact);
+          let fact_str = format_fact(&app, found_fact.fact);
           if let Some(subject_binding) = &found_fact.subject_binding {
             println!(
               "    {} ;; subject={}",
               fact_str,
-              format_subject(&database, &engine, subject_binding)
+              format_subject(&app, subject_binding)
             );
           } else {
             println!("    {}", fact_str);
@@ -601,12 +565,12 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
               .expected_facts
               .iter()
               .map(|expected| {
-                let fact_str = format_fact(&database, &engine, &expected.fact);
+                let fact_str = format_fact(&app, &expected.fact);
                 if let Some(subject_mapping) = &expected.subject_mapping {
                   format!(
                     "{} ;; subject={}",
                     fact_str,
-                    format_subject(&database, &engine, subject_mapping)
+                    format_subject(&app, subject_mapping)
                   )
                 } else {
                   fact_str
@@ -618,12 +582,12 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
             let new_lines: Vec<String> = actual_facts
               .iter()
               .map(|found_fact| {
-                let fact_str = format_fact(&database, &engine, found_fact.fact);
+                let fact_str = format_fact(&app, found_fact.fact);
                 if let Some(subject_binding) = &found_fact.subject_binding {
                   format!(
                     "{} ;; subject={}",
                     fact_str,
-                    format_subject(&database, &engine, subject_binding)
+                    format_subject(&app, subject_binding)
                   )
                 } else {
                   fact_str
@@ -650,8 +614,7 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
               }
 
               // Check if the facts match
-              let facts_match = format_fact(&database, &engine, actual.fact)
-                == format_fact(&database, &engine, &expected.fact);
+              let facts_match = format_fact(&app, actual.fact) == format_fact(&app, &expected.fact);
 
               if !facts_match {
                 continue;
@@ -661,22 +624,21 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
               let mapping_matches = match (&expected.subject_mapping, &actual.subject_binding) {
                 (None, None) => true,
                 (Some(expected_subj), Some(actual_subj)) => {
-                  format_subject(&database, &engine, expected_subj)
-                    == format_subject(&database, &engine, actual_subj)
+                  format_subject(&app, expected_subj) == format_subject(&app, actual_subj)
                 }
                 (None, Some(actual_subj)) => {
                   failure_reasons.push(format!(
                     "Fact '{}': Subject mapping was not expected but got: {}",
-                    format_fact(&database, &engine, &expected.fact),
-                    format_subject(&database, &engine, actual_subj)
+                    format_fact(&app, &expected.fact),
+                    format_subject(&app, actual_subj)
                   ));
                   false
                 }
                 (Some(expected_subj), None) => {
                   failure_reasons.push(format!(
                     "Fact '{}': Expected subject mapping '{}' but got None",
-                    format_fact(&database, &engine, &expected.fact),
-                    format_subject(&database, &engine, expected_subj)
+                    format_fact(&app, &expected.fact),
+                    format_subject(&app, expected_subj)
                   ));
                   false
                 }
@@ -694,9 +656,9 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
               if failure_reasons.is_empty() {
                 failure_reasons.push(format!(
                   "No matching fact found for: {}{}",
-                  format_fact(&database, &engine, &expected.fact),
+                  format_fact(&app, &expected.fact),
                   if let Some(subj) = &expected.subject_mapping {
-                    format!(" ;; subject={}", format_subject(&database, &engine, subj))
+                    format!(" ;; subject={}", format_subject(&app, subj))
                   } else {
                     String::new()
                   }
@@ -723,12 +685,12 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
                 .expected_facts
                 .iter()
                 .map(|expected| {
-                  let fact_str = format_fact(&database, &engine, &expected.fact);
+                  let fact_str = format_fact(&app, &expected.fact);
                   if let Some(subject_mapping) = &expected.subject_mapping {
                     format!(
                       "{} ;; subject={}",
                       fact_str,
-                      format_subject(&database, &engine, subject_mapping)
+                      format_subject(&app, subject_mapping)
                     )
                   } else {
                     fact_str
@@ -740,12 +702,12 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
               let new_lines: Vec<String> = actual_facts
                 .iter()
                 .map(|found_fact| {
-                  let fact_str = format_fact(&database, &engine, found_fact.fact);
+                  let fact_str = format_fact(&app, found_fact.fact);
                   if let Some(subject_binding) = &found_fact.subject_binding {
                     format!(
                       "{} ;; subject={}",
                       fact_str,
-                      format_subject(&database, &engine, subject_binding)
+                      format_subject(&app, subject_binding)
                     )
                   } else {
                     fact_str
@@ -779,8 +741,13 @@ fn run_explain_test(file_path: &Path, update_mode: bool) -> Result<bool> {
     .with_context(|| format!("Failed to parse test case: {:?}", file_path))?;
 
   let (mut database, mut fact_identifiers) = registry.into_database();
-  let mut watcher = DatabaseWatcher::new();
-  let engine = QueryEngine::new();
+
+  let mut app = App::new(MEMORY_BANK_SIZE);
+
+  // Transfer facts from registry database to app
+  for fact in database.facts_mut().drain(..) {
+    app.add_fact(fact);
+  }
 
   let mut success = true;
   let mut explain_count = 0;
@@ -795,14 +762,7 @@ fn run_explain_test(file_path: &Path, update_mode: bool) -> Result<bool> {
   for line in test_case.lines {
     match line {
       TestLine::Fact(fact, fact_identifier) => {
-        let fact_id = database.add_fact(fact);
-        watcher.handle_new_fact(
-          &database,
-          &engine,
-          SharedVariableBank::new(MEMORY_BANK_SIZE),
-          SharedVariableAllocator::new(),
-          fact_id,
-        );
+        let fact_id = app.add_fact(fact);
         if let Some(identifier) = fact_identifier {
           fact_identifiers.insert(identifier, fact_id);
         }
@@ -812,26 +772,22 @@ fn run_explain_test(file_path: &Path, update_mode: bool) -> Result<bool> {
       }
       TestLine::ExplainQuery(explain_query) => {
         // Resolve fact references before running explain queries
-        resolve_fact_references(&mut database, &fact_identifiers);
+        resolve_fact_references(&mut app, &fact_identifiers);
 
         explain_count += 1;
-        let engine = QueryEngine::new();
 
         println!(
           "  {} {} {}",
           "Explain".green().bold(),
           explain_count,
-          format_subject(&database, &engine, &explain_query.subject),
+          format_subject(&app, &explain_query.subject),
         );
 
         // Call the explain function
-        let bank = SharedVariableBank::new(32);
-        let allocator = SharedVariableAllocator::new();
-
-        let explain_result = engine.explain(&database, &explain_query.subject, bank, allocator);
+        let explain_result = app.explain_once(&explain_query.subject);
 
         // Format the result into lines
-        let actual_lines = format_explain_result(&engine, &database, &explain_result);
+        let actual_lines = format_explain_result(&app, &explain_result);
 
         println!(
           "  {} ({} lines)",

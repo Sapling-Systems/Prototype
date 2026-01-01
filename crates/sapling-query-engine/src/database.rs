@@ -1,16 +1,10 @@
 use sapling_data_model::{Fact, Subject};
 
-use crate::{
-  QueryEngine, SharedVariableAllocator, SharedVariableBank,
-  meta::QueryMeta,
-  system::System,
-  watcher::{DatabaseWatcher, QueryWatcher},
-};
+use crate::{meta::QueryMeta, system::System};
 
 #[derive(Debug, Clone)]
 pub struct Database {
   pub(crate) raw: Vec<Fact>,
-  pub(crate) watcher: DatabaseWatcher,
   subject_next_id: u128,
 }
 
@@ -19,7 +13,6 @@ impl Database {
   pub fn new() -> Self {
     let mut db = Self {
       raw: Vec::with_capacity(1024),
-      watcher: DatabaseWatcher::new(),
       subject_next_id: 0,
     };
     System::install(&mut db);

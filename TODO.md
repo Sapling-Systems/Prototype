@@ -4,8 +4,8 @@
 
 # TODO
 
-- Explain for functions
 - IDE UI: Structure Editor
+- Explain for functions
 - Meta: Multiple same properties / ALL meta
 - Meta: Scope meta
 - custom Reusables / functions
@@ -14,16 +14,3 @@
 - IDE UI: Data table
 - Sub databases / merging
 - Sub databases / merging explain
-
-
-x/bar = 123
-
-foo/bar == *
-
-sum/0 = 1
-sum/1 = ?foo/bar
-
-query/SystemTargetQuery = sum
-query/?SystemIntegerProperty = ?x
-
-sum/0 = 1 ?x = 1

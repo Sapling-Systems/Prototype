@@ -3,15 +3,18 @@ use std::{
   hash::{DefaultHasher, Hash, Hasher},
 };
 
-use sapling_data_model::{Query, SubjectSelector};
+use sapling_data_model::Query;
 
-use crate::{
-  Database, QueryEngine, SharedVariableAllocator, SharedVariableBank, machine::AbstractMachine,
-};
+use crate::{Database, QueryEngine, SharedVariableAllocator, SharedVariableBank};
 
 pub trait QueryWatcher: Debug {
-  fn on_change(&mut self);
-  fn box_clone(&self) -> Box<dyn QueryWatcher>;
+  fn on_change(
+    &mut self,
+    database: &mut Database,
+    query_engine: &QueryEngine,
+    variable_bank: SharedVariableBank,
+    variable_allocator: SharedVariableAllocator,
+  );
 }
 
 #[derive(Debug)]
@@ -19,16 +22,6 @@ struct SingleWatcher {
   root_query: Query,
   last_hash: u64,
   watcher: Box<dyn QueryWatcher>,
-}
-
-impl Clone for SingleWatcher {
-  fn clone(&self) -> Self {
-    SingleWatcher {
-      root_query: self.root_query.clone(),
-      last_hash: self.last_hash,
-      watcher: self.watcher.box_clone(),
-    }
-  }
 }
 
 impl SingleWatcher {
@@ -64,7 +57,6 @@ impl SingleWatcher {
     );
     for fact in machine {
       result.push(fact.fact_index);
-      println!("Found fact {:#?}", fact);
 
       if fact.fact.value.evaluated {
         Self::recursive_gather_dependencies(
@@ -86,7 +78,7 @@ impl SingleWatcher {
 
   fn handle_new_fact(
     &mut self,
-    database: &Database,
+    database: &mut Database,
     query_engine: &QueryEngine,
     variable_bank: SharedVariableBank,
     variable_allocator: SharedVariableAllocator,
@@ -102,10 +94,14 @@ impl SingleWatcher {
       &mut fact_ids,
     );
     let hash = Self::generate_result_hash(&fact_ids);
-    println!("Fact IDs: {:?}, Hash: {:x}", fact_ids, hash);
 
     if hash != self.last_hash {
-      self.watcher.on_change();
+      self.watcher.on_change(
+        database,
+        query_engine,
+        variable_bank.clone(),
+        variable_allocator.clone(),
+      );
       self.last_hash = hash;
     }
 
@@ -113,7 +109,7 @@ impl SingleWatcher {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DatabaseWatcher {
   watchers: Vec<SingleWatcher>,
 }
@@ -132,7 +128,7 @@ impl DatabaseWatcher {
 
   pub fn handle_new_fact(
     &mut self,
-    database: &Database,
+    database: &mut Database,
     query_engine: &QueryEngine,
     variable_bank: SharedVariableBank,
     variable_allocator: SharedVariableAllocator,
@@ -232,9 +228,8 @@ mod tests {
       },
     });
 
-    println!("Handle fact 1");
     watcher.handle_new_fact(
-      &database,
+      &mut database,
       &query_engine,
       variable_bank.clone(),
       variable_allocator.clone(),
@@ -265,9 +260,8 @@ mod tests {
       },
     });
 
-    println!("Handle fact 2");
     watcher.handle_new_fact(
-      &database,
+      &mut database,
       &query_engine,
       variable_bank,
       variable_allocator,
@@ -279,10 +273,13 @@ mod tests {
     #[derive(Clone, Debug)]
     struct TestWatcher;
     impl QueryWatcher for TestWatcher {
-      fn box_clone(&self) -> Box<dyn QueryWatcher> {
-        Box::new(self.clone())
-      }
-      fn on_change(&mut self) {
+      fn on_change(
+        &mut self,
+        _database: &mut Database,
+        _query_engine: &QueryEngine,
+        _variable_bank: SharedVariableBank,
+        _variable_allocator: SharedVariableAllocator,
+      ) {
         CHANGE_COUNT.fetch_add(1, Ordering::Relaxed);
       }
     }

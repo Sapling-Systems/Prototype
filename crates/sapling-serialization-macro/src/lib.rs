@@ -214,13 +214,14 @@ pub fn sapling_serialization_derive(input: TokenStream) -> TokenStream {
   TokenStream::from(expanded)
 }
 
-fn parse_deserialization_fact_fields(input: &DeriveInput) -> TokenStream2 {
+fn parse_deserialization_fact_fields(input: &DeriveInput) -> (TokenStream2, TokenStream2) {
   let Data::Struct(struc) = &input.data else {
     abort!(input.span(), "Only structs are supported as of now");
   };
 
   let mut fields = vec![];
   let mut field_names = vec![];
+  let mut queries = vec![];
 
   for field in struc.fields.iter() {
     let ident = field.ident.clone().unwrap();
@@ -242,6 +243,14 @@ fn parse_deserialization_fact_fields(input: &DeriveInput) -> TokenStream2 {
     field_names.push(ident.clone());
 
     if indexed {
+      queries.push(quote! {
+          sapling_data_model::Query {
+              subject: subject.clone(),
+              evaluated: false,
+              meta: None,
+              property: Some(System::CORE_INTEGER_PROPERTY.clone()),
+          }
+      });
       fields.push(quote! {
           let #ident = {
             let mut result = std::vec::Vec::new();
@@ -264,6 +273,17 @@ fn parse_deserialization_fact_fields(input: &DeriveInput) -> TokenStream2 {
           };
       });
     } else {
+      queries.push(quote! {
+          {
+            let property_subject = #static_property.get_or_init(|| context.new_static_subject(#name));
+            sapling_data_model::Query {
+                subject: subject.clone(),
+                evaluated: false,
+                meta: None,
+                property: Some(property_subject.clone()),
+            }
+          }
+      });
       fields.push(quote! {
             let #ident = {
                 let property_subject = #static_property.get_or_init(|| context.new_static_subject(#name));
@@ -279,13 +299,18 @@ fn parse_deserialization_fact_fields(input: &DeriveInput) -> TokenStream2 {
     }
   }
 
-  quote! {
-    #(#fields)*
+  (
+    quote! {
+      #(#fields)*
 
-    Ok(Self {
-      #(#field_names,)*
-    })
-  }
+      Ok(Self {
+        #(#field_names,)*
+      })
+    },
+    quote! {
+        vec![#(#queries),*]
+    },
+  )
 }
 
 #[proc_macro_error]
@@ -293,12 +318,16 @@ fn parse_deserialization_fact_fields(input: &DeriveInput) -> TokenStream2 {
 pub fn sapling_deserialization_derive(input: TokenStream) -> TokenStream {
   let input = parse_macro_input!(input as DeriveInput);
 
-  let fields = parse_deserialization_fact_fields(&input);
+  let (fields, queries) = parse_deserialization_fact_fields(&input);
 
   let ident = input.ident;
 
   let expanded = quote! {
       impl<T: sapling_serialization::DeserializerContext> sapling_serialization::SaplingDeserializable<T> for #ident {
+        fn first_level_queries(subject: &sapling_data_model::Subject, context: &mut T) -> Vec<sapling_data_model::Query> {
+            #queries
+        }
+
         fn deserialize_subject(
           subject: &sapling_data_model::Subject,
           context: &mut T,

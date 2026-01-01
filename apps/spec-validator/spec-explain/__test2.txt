@@ -25,14 +25,14 @@ explainQuery/fact1 = @data1value
 #> Constraint0: 0 [allWhereSomethingIs1/something == 1]
 #> Constraint1: 1 [allWhereSomethingIs1/value == *]
 #> Subject: data1
-#> Fact0: 36 [?matchDataValue10/something = 1]
+#> Fact0: 47 [?matchDataValue10/something = 1]
 #> Fact0: Operator = == = => PASS
 #> Fact0: Subject matchDataValue10 == data1 => PASS (unification)
 #> Fact0: Property something == something => PASS
 #> Fact0: Value 1 == 1 => PASS
-#> Fact1: 31 [data1/value = 10]
+#> Fact1: 42 [data1/value = 10]
 #> Fact1: Operator = == = => PASS
 #> Fact1: Subject data1 == data1 => PASS (unification)
 #> Fact1: Property value == value => PASS
-#> Yielded for Fact0: 36 [?matchDataValue10/something = 1] (subject: data1)
-#> Yielded for Fact1: 31 [data1/value = 10]
+#> Yielded for Fact0: 47 [?matchDataValue10/something = 1] (subject: data1)
+#> Yielded for Fact1: 42 [data1/value = 10]

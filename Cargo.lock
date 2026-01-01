@@ -350,6 +350,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sapling-app"
+version = "0.0.1"
+dependencies = [
+ "sapling-data-model",
+ "sapling-query-engine",
+ "sapling-serialization",
+]
+
+[[package]]
 name = "sapling-data-model"
 version = "0.0.1"
 
@@ -412,6 +421,7 @@ dependencies = [
  "colored",
  "pest",
  "pest_derive",
+ "sapling-app",
  "sapling-data-model",
  "sapling-query-engine",
  "similar",

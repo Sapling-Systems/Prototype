@@ -15,6 +15,11 @@ impl VariableAllocator {
     }
   }
 
+  fn reset(&mut self) {
+    self.next_variable_id = 0;
+    self.subject_map.clear();
+  }
+
   fn get_subject_map(&self) -> HashMap<u128, usize> {
     self.subject_map.clone()
   }
@@ -62,5 +67,9 @@ impl SharedVariableAllocator {
 
   pub fn get_subject_map(&self) -> HashMap<u128, usize> {
     self.instance.borrow().get_subject_map()
+  }
+
+  pub fn reset(&self) {
+    self.instance.borrow_mut().reset();
   }
 }

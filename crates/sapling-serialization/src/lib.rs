@@ -47,6 +47,7 @@ impl_serializable_string!(String);
 impl_serializable_string!(str);
 
 pub trait SaplingDeserializable<T: DeserializerContext>: Sized {
+  fn first_level_queries(subject: &sapling_data_model::Subject, context: &mut T) -> Vec<Query>;
   fn deserialize_subject(subject: &Subject, context: &mut T) -> Result<Self, DeserializeError>;
   fn deserialize_all(context: &mut T) -> Vec<Result<Self, DeserializeError>>;
 }
@@ -68,6 +69,13 @@ pub enum DeserializeError {
 macro_rules! impl_deserializable_integer {
   ($type:ty) => {
     impl<T: DeserializerContext> SaplingDeserializable<T> for $type {
+      fn first_level_queries(
+        _subject: &sapling_data_model::Subject,
+        _context: &mut T,
+      ) -> Vec<Query> {
+        vec![]
+      }
+
       fn deserialize_subject(
         subject: &Subject,
         _context: &mut T,
@@ -100,6 +108,12 @@ impl_deserializable_integer!(u64);
 macro_rules! impl_deserializable_string {
   ($type:ty) => {
     impl<T: DeserializerContext> SaplingDeserializable<T> for $type {
+      fn first_level_queries(
+        _subject: &sapling_data_model::Subject,
+        _context: &mut T,
+      ) -> Vec<Query> {
+        vec![]
+      }
       fn deserialize_subject(
         subject: &Subject,
         _context: &mut T,
