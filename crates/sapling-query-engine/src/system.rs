@@ -75,9 +75,7 @@ impl System {
         evaluated: false,
         property: None,
       },
-      meta: Subject::String {
-        value: "default".to_string(),
-      },
+      meta: System::CORE_META,
       operator: System::CORE_OPERATOR_IS.clone(),
       value: SubjectSelector {
         subject: Subject::String {

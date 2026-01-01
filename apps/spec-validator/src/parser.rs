@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use pest::Parser;
 use pest_derive::Parser;
+use sapling_app::App;
 use sapling_data_model::{Fact, Subject, SubjectSelector};
 use sapling_query_engine::{Database, System};
+use sapling_std::StandardLibrary;
 use std::collections::HashMap;
 
 #[derive(Parser)]
@@ -44,20 +46,23 @@ pub struct TestCase {
 pub struct SubjectRegistry {
   static_subjects: HashMap<String, Subject>,
   fact_identifiers: HashMap<String, usize>,
-  database: Database,
+  app: App,
 }
 
 impl SubjectRegistry {
   pub fn new() -> Self {
+    let mut app = App::new(128);
+    app.add_plugin(StandardLibrary::default());
+
     Self {
       static_subjects: HashMap::new(),
       fact_identifiers: HashMap::new(),
-      database: Database::new(),
+      app,
     }
   }
 
   fn get_or_create_static_subject(&mut self, name: &str) -> Subject {
-    let system_subject = System::get_named_subject(name);
+    let system_subject = self.app.get_global_by_name(name);
     if let Some(system_subject) = system_subject {
       return system_subject;
     }
@@ -65,8 +70,8 @@ impl SubjectRegistry {
     if let Some(subject) = self.static_subjects.get(name) {
       subject.clone()
     } else {
-      let subject = self.database.new_static_subject();
-      self.database.add_fact(Fact {
+      let subject = self.app.get_raw_database_mut().new_static_subject();
+      self.app.get_raw_database_mut().add_fact(Fact {
         subject: SubjectSelector {
           subject: subject.clone(),
           evaluated: false,
@@ -413,7 +418,7 @@ impl SubjectRegistry {
     Ok(TestCase { lines })
   }
 
-  pub fn into_database(self) -> (Database, HashMap<String, usize>) {
-    (self.database, self.fact_identifiers)
+  pub fn into_database(self) -> (App, HashMap<String, usize>) {
+    (self.app, self.fact_identifiers)
   }
 }

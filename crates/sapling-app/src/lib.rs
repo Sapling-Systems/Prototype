@@ -1,12 +1,13 @@
 use sapling_data_model::{Fact, Query, Subject};
 use sapling_query_engine::{
-  Database, DatabaseWatcher, ExplainQuery, FoundFact, QueryEngine, SharedVariableAllocator,
-  SharedVariableBank,
+  Database, DatabaseWatcher, FoundFact, QueryEngine, SharedVariableAllocator, SharedVariableBank,
 };
 
-use crate::plugin::{AppPlugin, AppPluginInstallContext};
+pub use crate::plugin::{AppPlugin, AppPluginInstallContext};
+use crate::registry::AppRegistry;
 
 mod plugin;
+mod registry;
 mod serialization;
 
 pub struct App {
@@ -15,6 +16,7 @@ pub struct App {
   query_engine: QueryEngine,
   variable_allocator: SharedVariableAllocator,
   variable_bank: SharedVariableBank,
+  registry: AppRegistry,
 }
 
 impl App {
@@ -24,6 +26,7 @@ impl App {
     let query_engine = QueryEngine::new();
     let variable_allocator = SharedVariableAllocator::new();
     let variable_bank = SharedVariableBank::new(bank_size);
+    let registry = AppRegistry::default();
 
     Self {
       database,
@@ -31,6 +34,7 @@ impl App {
       query_engine,
       variable_allocator,
       variable_bank,
+      registry,
     }
   }
 
@@ -49,7 +53,12 @@ impl App {
       &mut self.query_engine,
       self.variable_bank.clone(),
       self.variable_allocator.clone(),
+      &mut self.registry,
     ));
+  }
+
+  pub fn get_global_by_name(&self, name: &str) -> Option<Subject> {
+    self.registry.get_global_by_name(name)
   }
 
   pub fn query_once<'a>(&'a self, query: &Query) -> impl Iterator<Item = FoundFact<'a>> {

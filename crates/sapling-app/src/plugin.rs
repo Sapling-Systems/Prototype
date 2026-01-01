@@ -5,7 +5,7 @@ use sapling_query_engine::{
 };
 use sapling_serialization::{DeserializeError, SaplingDeserializable, SaplingSerializable};
 
-use crate::serialization::AppPluginSerializerContext;
+use crate::{registry::AppRegistry, serialization::AppPluginSerializerContext};
 
 pub trait AppPlugin {
   fn install_plugin(&mut self, context: &mut AppPluginInstallContext);
@@ -14,6 +14,7 @@ pub trait AppPlugin {
 pub struct AppPluginInstallContext<'a> {
   database: &'a mut Database,
   watcher: &'a mut DatabaseWatcher,
+  registry: &'a mut AppRegistry,
   query_engine: &'a mut QueryEngine,
   variable_bank: SharedVariableBank,
   variable_allocator: SharedVariableAllocator,
@@ -26,6 +27,7 @@ impl<'a> AppPluginInstallContext<'a> {
     query_engine: &'a mut QueryEngine,
     variable_bank: SharedVariableBank,
     variable_allocator: SharedVariableAllocator,
+    registry: &'a mut AppRegistry,
   ) -> Self {
     Self {
       database,
@@ -33,6 +35,7 @@ impl<'a> AppPluginInstallContext<'a> {
       query_engine,
       variable_bank,
       variable_allocator,
+      registry,
     }
   }
 
@@ -42,8 +45,10 @@ impl<'a> AppPluginInstallContext<'a> {
     for<'b> TArg: SaplingDeserializable<AppPluginSerializerContext<'b>>,
     for<'b> TOut: SaplingSerializable<AppPluginSerializerContext<'b>>,
   {
-    let subject = System::new_named_static(self.database, name);
-    let result_subject = System::new_named_static(self.database, result_name);
+    let subject = self.registry.create_global(self.database, name.into());
+    let result_subject = self
+      .registry
+      .create_global(self.database, result_name.into());
 
     let queries_for_input = {
       let mut context = AppPluginSerializerContext::new(
@@ -51,6 +56,7 @@ impl<'a> AppPluginInstallContext<'a> {
         self.query_engine,
         self.variable_bank.clone(),
         self.variable_allocator.clone(),
+        Some(&mut self.registry),
       );
       TArg::first_level_queries(&subject, &mut context)
     };
@@ -68,6 +74,7 @@ impl<'a> AppPluginInstallContext<'a> {
             query_engine,
             variable_bank.clone(),
             variable_allocator.clone(),
+            None,
           );
           let argument = TArg::deserialize_subject(subject, &mut context);
           if let Err(err) = argument {

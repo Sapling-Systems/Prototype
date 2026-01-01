@@ -394,6 +394,13 @@ dependencies = [
 [[package]]
 name = "sapling-std"
 version = "0.0.1"
+dependencies = [
+ "sapling-app",
+ "sapling-data-model",
+ "sapling-query-engine",
+ "sapling-serialization",
+ "sapling-serialization-macro",
+]
 
 [[package]]
 name = "sha2"
@@ -424,6 +431,7 @@ dependencies = [
  "sapling-app",
  "sapling-data-model",
  "sapling-query-engine",
+ "sapling-std",
  "similar",
 ]
 

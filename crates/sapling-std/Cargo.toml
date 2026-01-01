@@ -4,3 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+sapling-serialization-macro.workspace = true
+sapling-serialization.workspace = true
+sapling-app.workspace = true
+sapling-data-model.workspace = true
+sapling-query-engine.workspace = true

@@ -325,6 +325,7 @@ pub fn sapling_deserialization_derive(input: TokenStream) -> TokenStream {
   let expanded = quote! {
       impl<T: sapling_serialization::DeserializerContext> sapling_serialization::SaplingDeserializable<T> for #ident {
         fn first_level_queries(subject: &sapling_data_model::Subject, context: &mut T) -> Vec<sapling_data_model::Query> {
+            use sapling_query_engine::System;
             #queries
         }
 
@@ -333,6 +334,7 @@ pub fn sapling_deserialization_derive(input: TokenStream) -> TokenStream {
           context: &mut T,
         ) -> Result<Self, sapling_serialization::DeserializeError> {
             use sapling_data_model::{Subject};
+            use sapling_query_engine::System;
             use sapling_serialization::DeserializeError;
 
             #fields

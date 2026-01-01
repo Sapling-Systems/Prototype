@@ -1,0 +1,11 @@
+MathSum/0 = 1
+MathSum/1 = 2
+MathSum/2 = 3
+
+> MathSum
+>> MathSum/0 = 1
+>> MathSum/Result = 1
+>> MathSum/1 = 2
+>> MathSum/Result = 3
+>> MathSum/2 = 3
+>> MathSum/Result = 6

@@ -1,34 +1,14 @@
-/*
-#[sapling_func("Sum", "result")]
-fn math_sum(
-    #[num_index]
-    values: Vec<u64>
-) -> u64 {
-    values.iter().sum()
+use sapling_app::{AppPlugin, AppPluginInstallContext};
+
+use crate::math::std_math_operation_add;
+
+mod math;
+
+#[derive(Default)]
+pub struct StandardLibrary;
+
+impl AppPlugin for StandardLibrary {
+  fn install_plugin(&mut self, context: &mut AppPluginInstallContext) {
+    context.add_interop_fn("MathSum", "Result", std_math_operation_add);
+  }
 }
-
-#[sapling_func("GreaterThan", "result")]
-fn math_gt(
-    #[subject]
-    left: u64,
-    #[subject]
-    right: u64,
-) -> bool {
-    left > right
-}
-
-#[derive(SaplingSchema)]
-struct ExplainResult {}
-
-#[sapling_func("Explain", "result")]
-fn explain(
-    context: SaplingFuncContext,
-    #[subject]
-    query: Subject,
-    #[num_index("fact")]
-    facts: Vec<usize>,
-) -> ExplainResult {}
-
-#[derive(SaplingSerialize, SaplingDeserialize)]
-
-*/

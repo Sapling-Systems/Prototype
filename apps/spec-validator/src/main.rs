@@ -472,14 +472,7 @@ fn run_test(file_path: &Path, update_mode: bool) -> Result<bool> {
     .parse_test_case(&content)
     .with_context(|| format!("Failed to parse test case: {:?}", file_path))?;
 
-  let (mut database, mut fact_identifiers) = registry.into_database();
-
-  let mut app = App::new(MEMORY_BANK_SIZE);
-
-  // Transfer facts from registry database to app
-  for fact in database.facts_mut().drain(..) {
-    app.add_fact(fact);
-  }
+  let (mut app, mut fact_identifiers) = registry.into_database();
 
   let mut success = true;
   let mut query_count = 0;
@@ -740,14 +733,7 @@ fn run_explain_test(file_path: &Path, update_mode: bool) -> Result<bool> {
     .parse_test_case(&content)
     .with_context(|| format!("Failed to parse test case: {:?}", file_path))?;
 
-  let (mut database, mut fact_identifiers) = registry.into_database();
-
-  let mut app = App::new(MEMORY_BANK_SIZE);
-
-  // Transfer facts from registry database to app
-  for fact in database.facts_mut().drain(..) {
-    app.add_fact(fact);
-  }
+  let (mut app, mut fact_identifiers) = registry.into_database();
 
   let mut success = true;
   let mut explain_count = 0;
