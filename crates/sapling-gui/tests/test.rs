@@ -1,4 +1,4 @@
-use sapling_gui::prelude::*;
+use sapling_gui::{NoopRenderer, prelude::*};
 
 #[test]
 fn test_simple_layouting() {
@@ -20,7 +20,7 @@ fn test_simple_layouting() {
         .build(context);
     }
 
-    fn render(&self, layout: &ResolvedLayout) {
+    fn render(&self, layout: &ResolvedLayout, _renderer: &mut dyn Renderer, _theme: &mut Theme) {
       println!("RootComponent");
       assert_eq!(layout.height, 600.0);
       assert_eq!(layout.width, 400.0);
@@ -34,7 +34,7 @@ fn test_simple_layouting() {
   impl Component for ChildComponent {
     fn construct(&self, _context: &mut ElementContext) {}
 
-    fn render(&self, layout: &ResolvedLayout) {
+    fn render(&self, layout: &ResolvedLayout, _renderer: &mut dyn Renderer, _theme: &mut Theme) {
       println!("ChildComponent {:?}", layout);
       assert_eq!(layout.height, 568.0);
       assert_eq!(layout.width, 400.0);
@@ -55,7 +55,7 @@ fn test_simple_layouting() {
         .build(context);
     }
 
-    fn render(&self, layout: &ResolvedLayout) {
+    fn render(&self, layout: &ResolvedLayout, _renderer: &mut dyn Renderer, _theme: &mut Theme) {
       println!("ChildComponent2 {:?}", layout);
       assert_eq!(layout.height, 568.0);
       assert_eq!(layout.width, 368.0);
@@ -69,7 +69,7 @@ fn test_simple_layouting() {
   impl Component for EndComponent {
     fn construct(&self, _context: &mut ElementContext) {}
 
-    fn render(&self, layout: &ResolvedLayout) {
+    fn render(&self, layout: &ResolvedLayout, _renderer: &mut dyn Renderer, _theme: &mut Theme) {
       println!("EndComponent");
       assert_eq!(layout.height, 32.0);
       assert_eq!(layout.width, 32.0);
@@ -79,8 +79,9 @@ fn test_simple_layouting() {
   }
 
   // Try several times to reduce chance of solver randomness / failure
+  let mut theme = Theme::mock();
   for _ in 0..30 {
     let mut orchestrator = Orchestrator::new();
-    orchestrator.construct_and_render(RootComponent, 400.0, 600.0);
+    orchestrator.construct_and_render(RootComponent, 400.0, 600.0, &mut NoopRenderer, &mut theme);
   }
 }

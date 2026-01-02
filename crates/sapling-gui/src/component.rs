@@ -1,6 +1,8 @@
 use crate::{
   layout::{ElementConstraint, ElementConstraints, ResolvedLayout},
   orchestrator::{Element, ElementContext},
+  prelude::Renderer,
+  theme::Theme,
 };
 
 pub struct LayoutedComponent<T: ComponentElement> {
@@ -23,8 +25,8 @@ pub trait ComponentElement: Sized {
 }
 
 pub trait Component {
-  fn construct(&self, context: &mut ElementContext);
-  fn render(&self, layout: &ResolvedLayout);
+  fn construct(&self, _context: &mut ElementContext) {}
+  fn render(&self, _layout: &ResolvedLayout, _renderer: &mut dyn Renderer, _theme: &mut Theme) {}
 }
 
 impl<T: ComponentElement> ComponentElement for LayoutedComponent<T> {

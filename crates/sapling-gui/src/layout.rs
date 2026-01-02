@@ -77,11 +77,20 @@ impl ElementConstraints {
     }
   }
 
+  pub fn center() -> Self {
+    ElementConstraints {
+      constraints: vec![
+        constraint1!(self_left + self_right == parent_left + parent_right),
+        constraint1!(self_top + self_bottom == parent_top + parent_bottom),
+      ],
+    }
+  }
+
   pub fn fixed_size(width: f32, height: f32) -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_right == parent_left + width),
-        constraint1!(self_bottom == parent_top + height),
+        constraint1!(self_right - self_left == width),
+        constraint1!(self_bottom - self_top == height),
       ],
     }
   }

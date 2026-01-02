@@ -8,6 +8,8 @@ use crate::{
   layout::{
     ElementConstraint, ElementConstraintOperator, ElementConstraintVariable, ResolvedLayout,
   },
+  prelude::Renderer,
+  theme::Theme,
 };
 
 pub struct Orchestrator {
@@ -35,7 +37,15 @@ impl Orchestrator {
     }
   }
 
-  pub fn construct_and_render<T: Component + 'static>(&mut self, root: T, width: f32, height: f32) {
+  pub fn construct_and_render<T: Component + 'static, TRenderer: Renderer>(
+    &mut self,
+    root: T,
+    width: f32,
+    height: f32,
+    renderer: &mut TRenderer,
+    theme: &mut Theme,
+  ) -> (std::time::Duration, std::time::Duration) {
+    let layouting_start = std::time::Instant::now();
     self.elements.clear();
 
     use kasuari::Strength;
@@ -62,12 +72,11 @@ impl Orchestrator {
       root_vars: &self.root_vars,
       render_width: width,
       render_height: height,
+      theme,
     });
 
     let element = &mut self.elements[0];
     element.component = Some(component);
-
-    println!("Construction ended with {} elements", self.elements.len());
 
     let mut solver = KasuariSolver::new();
     let const_constraints = solver.add_constraints([
@@ -91,28 +100,33 @@ impl Orchestrator {
       eprintln!("Solver error on element constraints: {:?}", err);
     }
 
-    for (id, element) in self.elements.iter().enumerate() {
+    let rendering_start = std::time::Instant::now();
+    let layouting_duration = rendering_start - layouting_start;
+
+    for element in self.elements.iter() {
       let bottom = solver.get_value(element.layout_vars.self_bottom);
       let right = solver.get_value(element.layout_vars.self_right);
       let left = solver.get_value(element.layout_vars.self_left);
       let top = solver.get_value(element.layout_vars.self_top);
 
-      println!(
-        "Element {:?} (parent: {:?}) has bounds ({}, {}, {}, {})",
-        id, element.parent_element, left, top, right, bottom
-      );
-
       if let Some(component) = &element.component {
-        component.render(&ResolvedLayout {
-          width: (right - left) as f32,
-          height: (bottom - top) as f32,
-          x: left as f32,
-          y: top as f32,
-        });
+        component.render(
+          &ResolvedLayout {
+            width: (right - left) as f32,
+            height: (bottom - top) as f32,
+            x: left as f32,
+            y: top as f32,
+          },
+          renderer,
+          theme,
+        );
       } else {
         eprintln!("Allocated element has no component")
       }
     }
+
+    let rendering_duration = std::time::Instant::now() - rendering_start;
+    (rendering_duration, layouting_duration)
   }
 }
 
@@ -126,6 +140,7 @@ pub struct ElementContext<'a> {
   root_vars: &'a RootVars,
   render_width: f32,
   render_height: f32,
+  theme: &'a Theme,
 }
 
 struct AllocatedElement {
@@ -167,6 +182,7 @@ impl<'a> ElementContext<'a> {
       render_height: self.render_height,
       render_width: self.render_width,
       root_vars: self.root_vars,
+      theme: self.theme,
     });
     self.elements[element.id].component = Some(component);
   }
@@ -178,6 +194,7 @@ impl<'a> ElementContext<'a> {
       render_height: self.render_height,
       render_width: self.render_width,
       root_vars: self.root_vars,
+      theme: self.theme,
     }
   }
 
@@ -193,10 +210,6 @@ impl<'a> ElementContext<'a> {
       .map(|constraint| self.map_constraint(constraint, element))
       .collect::<Vec<_>>();
 
-    println!(
-      "Setting constraints on element {} (parent = {:?})",
-      id, element.parent_element
-    );
     let element = self.elements.get_mut(id).unwrap();
     element.constraints.extend(constraints);
   }

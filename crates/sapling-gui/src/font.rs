@@ -1,8 +1,10 @@
+use std::ffi::CString;
+
 use anyhow::{Result, anyhow};
 use raylib::{
   RaylibHandle, RaylibThread,
   color::Color,
-  ffi::{self, Font as RaylibFFIFont, FontType, Rectangle, Texture},
+  ffi::{self, Font as RaylibFFIFont, FontType, MeasureTextEx, Rectangle, Texture},
   math::Vector2,
   prelude::{RaylibDraw, RaylibDrawHandle, RaylibShaderModeExt},
   shaders::Shader,
@@ -10,6 +12,7 @@ use raylib::{
   texture::{RaylibTexture2D, Texture2D},
 };
 
+// TODO: This is hardcoded to raylib renderer
 pub struct Font {
   shader: Shader,
   glyph_info: RSliceGlyphInfo,
@@ -53,7 +56,7 @@ impl Font {
     let shader = raylib.load_shader_from_memory(
       thread,
       None,
-      Some(include_str!("../resources/shaders/sdf.fs")),
+      Some(include_str!("../../../apps/ide/resources/shaders/sdf.fs")),
     );
 
     Ok(Self {
@@ -62,6 +65,34 @@ impl Font {
       rectangles,
       texture,
     })
+  }
+
+  pub fn calculate_text_size(&mut self, text: &str, font_size: f32) -> Vector2 {
+    let glyph_info_slice_ffi = unsafe {
+      std::mem::transmute::<_, &mut ffi::GlyphInfo>(&mut self.glyph_info.as_mut().as_mut()[0])
+    };
+
+    let font = RaylibFFIFont {
+      baseSize: Self::FONT_SIZE,
+      glyphCount: Self::FONT_GLYPHS.len() as i32,
+      glyphPadding: 0,
+      glyphs: glyph_info_slice_ffi as _,
+      recs: self.rectangles.as_mut_ptr(),
+      texture: Texture {
+        format: self.texture.format,
+        height: self.texture.height,
+        width: self.texture.width,
+        mipmaps: self.texture.mipmaps,
+        id: self.texture.id,
+      },
+    };
+
+    let c_text = CString::new(text).unwrap();
+    let output = unsafe { MeasureTextEx(font, c_text.as_ptr(), font_size, 0.0) };
+    Vector2 {
+      x: output.x,
+      y: output.y,
+    }
   }
 
   pub fn draw_text(
@@ -92,12 +123,8 @@ impl Font {
       },
     };
 
-    {
-      let mut shader_mode = draw.begin_shader_mode(&mut self.shader);
-      shader_mode.draw_text_ex(FontWrapper(font), text, position, font_size, 0.0, color);
-    }
-
-    draw.draw_texture(&self.texture, 100, 100, Color::BLACK);
+    let mut shader_mode = draw.begin_shader_mode(&mut self.shader);
+    shader_mode.draw_text_ex(FontWrapper(font), text, position, font_size, 0.0, color);
   }
 }
 

@@ -336,6 +336,7 @@ dependencies = [
  "anyhow",
  "raylib",
  "sapling-app",
+ "sapling-gui",
 ]
 
 [[package]]
@@ -638,7 +639,9 @@ version = "0.0.1"
 name = "sapling-gui"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "kasuari",
+ "raylib",
  "sapling-gui-macro",
 ]
 
