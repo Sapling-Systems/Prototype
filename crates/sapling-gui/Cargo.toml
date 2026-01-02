@@ -1,0 +1,8 @@
+[package]
+name = "sapling-gui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kasuari.workspace = true
+sapling-gui-macro.workspace = true

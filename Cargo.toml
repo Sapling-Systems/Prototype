@@ -8,6 +8,8 @@ members = [
     "crates/sapling-serialization-macro",
     "crates/sapling-serialization",
     "crates/sapling-app",
+    "crates/sapling-gui",
+    "crates/sapling-gui-macro",
     "crates/sapling-std",
 ]
 
@@ -21,12 +23,19 @@ sapling-data-model = { path = "crates/sapling-data-model" }
 sapling-serialization-macro = { path = "crates/sapling-serialization-macro" }
 sapling-serialization = { path = "crates/sapling-serialization" }
 sapling-app = { path = "crates/sapling-app" }
+sapling-gui = { path = "crates/sapling-gui" }
+sapling-gui-macro = { path = "crates/sapling-gui-macro" }
 sapling-std = { path = "crates/sapling-std" }
+
 sapling-query-engine = { path = "crates/sapling-query-engine" }
 itertools = "0.14.0"
+raylib = "5.5.1"
 syn = "2.0.111"
 quote = "1.0.42"
 proc-macro-error = "1.0.4"
 proc-macro2 = "1.0.104"
+proc-macro-crate = "3.2.0"
 darling = "0.23.0"
 thiserror = "2.0.17"
+anyhow = "1.0.100"
+kasuari = "0.4.11"

@@ -4,3 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+raylib.workspace = true
+anyhow.workspace = true
+sapling-app.workspace = true

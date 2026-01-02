@@ -1,10 +1,9 @@
 # IN PROGRESS
 
-- Concept for built-in functions
+- IDE UI: Structure Editor
 
 # TODO
 
-- IDE UI: Structure Editor
 - Explain for functions
 - Meta: Multiple same properties / ALL meta
 - Meta: Scope meta
