@@ -10,49 +10,57 @@ uniform float blurRadius;
 
 out vec4 finalColor;
 
-// Gaussian weight function
-float gaussian(float x, float sigma) {
-    return exp(-(x * x) / (2.0 * sigma * sigma));
-}
+vec4 premultiply(vec4 c) { c.rgb *= c.a; return c; }
+vec4 unpremultiply(vec4 c) { if (c.a > 1e-6) c.rgb /= c.a; else c.rgb = vec3(0.0); return c; }
 
 void main()
 {
-    // Early exit for no blur
-    if (blurRadius <= 0.001) {
-        finalColor = texture(texture0, fragTexCoord);
+    vec4 modulate = fragColor * colDiffuse;
+
+    float r = clamp(blurRadius, 0.0, 20.0);   // IMPORTANT: cap for performance in single-pass 2D
+    if (r < 0.5)
+    {
+        finalColor = texture(texture0, fragTexCoord) * modulate;
         return;
     }
 
-    // Calculate sigma based on blur radius
-    float sigma = max(blurRadius * 0.3, 0.0001);
+    ivec2 ts = textureSize(texture0, 0);
+    vec2 texel = 1.0 / vec2(max(ts.x, 1), max(ts.y, 1));
 
-    // Kernel size - scaled based on blur radius
-    int kernelSize = int(ceil(blurRadius));
-    kernelSize = max(1, min(kernelSize, 12));
+    // Gaussian sigma heuristic
+    float sigma = max(r * 0.5, 0.001);
+    float invTwoSigma2 = 1.0 / (2.0 * sigma * sigma);
 
-    vec4 colorSum = vec4(0.0);
-    float weightSum = 0.0;
+    // Convert radius to integer taps and cap hard
+    int R = int(ceil(r));
+    R = clamp(R, 1, 20); // (2R+1)^2 => up to 41*41=1681 samples worst-case; keep this low!
 
-    // Calculate texel size (assuming square aspect ratio)
-    float texelSize = 1.0 / renderWidth;
+    vec4 accum = vec4(0.0);
+    float wsum = 0.0;
 
-    // Apply 2D Gaussian blur with premultiplied alpha
-    for (int y = -kernelSize; y <= kernelSize; y++) {
-        for (int x = -kernelSize; x <= kernelSize; x++) {
-            vec2 offset = vec2(float(x), float(y));
-            float distance = length(offset);
-            float weight = gaussian(distance, sigma);
+    for (int y = -20; y <= 20; y++)
+    {
+        if (abs(y) > R) continue;
+        for (int x = -20; x <= 20; x++)
+        {
+            if (abs(x) > R) continue;
 
-            vec4 sampleColor = texture(texture0, fragTexCoord + offset * texelSize);
+            float d2 = float(x*x + y*y);
+            float w = exp(-d2 * invTwoSigma2);
 
-            // Premultiply alpha to avoid white halos on transparent edges
-            colorSum.rgb += sampleColor.rgb * sampleColor.a * weight;
-            colorSum.a += sampleColor.a * weight;
-            weightSum += weight;
+            vec4 s = premultiply(texture(texture0, fragTexCoord + vec2(x, y) * texel));
+
+            // alpha-weighting to reduce hidden-RGB halos
+            float aw = clamp(s.a, 0.0, 1.0);
+            float wa = w * mix(0.25, 1.0, aw);
+
+            accum += s * wa;
+            wsum  += wa;
         }
     }
 
-    // Normalize and unpremultiply alpha
-    finalColor.rgb = colorSum.a > 0.0001 ? colorSum.rgb / colorSum.a : vec3(0.0);
-    finalColor.a = colorSum.a / weightSum;
+    vec4 blurred = (wsum > 1e-6) ? (accum / wsum) : vec4(0.0);
+    blurred = unpremultiply(blurred);
+
+    finalColor = blurred * modulate;
 }

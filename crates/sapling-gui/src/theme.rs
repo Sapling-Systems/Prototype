@@ -45,9 +45,9 @@ impl Theme {
       spacing_xlarge: 32.0,
       radius_default: 8.0,
       drop_shadow_default: DropShadowStyle {
-        color: Color::BLACK.alpha(0.55),
+        color: Color::BLACK.alpha(0.70),
         offset: Vector2::new(2.0, 4.0),
-        blur_radius: 8.0,
+        blur_radius: 4.0,
       },
     }
   }
@@ -66,9 +66,9 @@ impl Theme {
       spacing_xlarge: 32.0,
       radius_default: 8.0,
       drop_shadow_default: DropShadowStyle {
-        color: Color::BLACK.alpha(0.55),
+        color: Color::BLACK.alpha(0.4),
         offset: Vector2::new(2.0, 4.0),
-        blur_radius: 8.0,
+        blur_radius: 1.0,
       },
     }
   }

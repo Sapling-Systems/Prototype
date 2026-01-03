@@ -68,6 +68,7 @@ impl Component for StyledView {
       self.style.border_radius.2,
       self.style.border_radius.3,
     );
+
     if let Some(shadow) = &self.style.drop_shadow {
       let layout = layout.clone();
       let shadow = shadow.clone();
