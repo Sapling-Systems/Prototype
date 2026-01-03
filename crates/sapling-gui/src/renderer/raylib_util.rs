@@ -13,8 +13,8 @@ pub struct CornerRadii {
 /// - If `fill` is true, draws a filled shape.
 /// - If `outline_thickness` > 0.0, draws an outline with that thickness.
 /// - `arc_segments` controls smoothness per corner arc (e.g. 6..24).
-pub fn draw_round_rect_per_corner(
-  d: &mut RaylibDrawHandle,
+pub fn draw_round_rect_per_corner<T: RaylibDraw>(
+  d: &mut T,
   rect: Rectangle,
   mut r: CornerRadii,
   arc_segments: i32,
@@ -209,7 +209,7 @@ fn ensure_ccw(pts: &mut Vec<Vector2>) {
   }
 }
 
-fn fill_convex_polygon_fan(d: &mut RaylibDrawHandle, pts: &[Vector2], color: Color) {
+fn fill_convex_polygon_fan<T: RaylibDraw>(d: &mut T, pts: &[Vector2], color: Color) {
   if pts.len() < 3 {
     return;
   }

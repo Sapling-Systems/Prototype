@@ -1,6 +1,6 @@
 use sapling_gui_macro::constraint1;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResolvedLayout {
   pub width: f32,
   pub height: f32,
@@ -74,6 +74,18 @@ impl ElementConstraints {
         constraint1!(self_left == parent_top),
         constraint1!(self_top == parent_top),
       ],
+    }
+  }
+
+  pub fn relative_top(spacing: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_top == parent_top + spacing)],
+    }
+  }
+
+  pub fn relative_left(spacing: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_left == parent_left + spacing)],
     }
   }
 

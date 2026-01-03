@@ -140,7 +140,7 @@ pub struct ElementContext<'a> {
   root_vars: &'a RootVars,
   render_width: f32,
   render_height: f32,
-  theme: &'a Theme,
+  pub theme: &'a Theme,
 }
 
 struct AllocatedElement {

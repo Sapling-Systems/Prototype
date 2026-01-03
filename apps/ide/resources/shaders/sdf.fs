@@ -15,10 +15,21 @@ void main()
 {
     // Texel color fetching from texture sampler
     // NOTE: Calculate alpha using signed distance field (SDF)
-    float distanceFromOutline = texture(texture0, fragTexCoord).a - 0.5;
-    float distanceChangePerFragment = length(vec2(dFdx(distanceFromOutline), dFdy(distanceFromOutline)));
-    float alpha = smoothstep(-distanceChangePerFragment, distanceChangePerFragment, distanceFromOutline);
+    vec4 texel = texture(texture0, fragTexCoord);
+
+    // Raylib SDF stores distance in alpha, centered at 0.5
+    float distance = texel.a - 0.5;
+
+    // Calculate adaptive smoothing based on screen-space derivatives
+    // This gives better anti-aliasing at different scales
+    float smoothing = length(vec2(dFdx(distance), dFdy(distance)));
+
+    // Clamp smoothing to avoid artifacts at very small/large scales
+    smoothing = clamp(smoothing, 0.0001, 0.25);
+
+    // Use smoothstep for anti-aliased edges
+    float alpha = smoothstep(-smoothing, smoothing, distance);
 
     // Calculate final fragment color
-    finalColor = vec4(fragColor.rgb, fragColor.a*alpha);
+    finalColor = vec4(fragColor.rgb, fragColor.a * alpha);
 }

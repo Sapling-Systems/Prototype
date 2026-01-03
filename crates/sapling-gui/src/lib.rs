@@ -7,4 +7,4 @@ pub mod prelude;
 mod renderer;
 mod theme;
 
-pub use renderer::{NoopRenderer, RaylibRenderer};
+pub use renderer::{NoopRenderer, RaylibRenderer, RaylibRendererState};

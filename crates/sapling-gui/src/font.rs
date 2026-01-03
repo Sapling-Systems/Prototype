@@ -95,9 +95,9 @@ impl Font {
     }
   }
 
-  pub fn draw_text(
+  pub fn draw_text<T: RaylibDraw>(
     &mut self,
-    draw: &mut RaylibDrawHandle,
+    draw: &mut T,
     text: &str,
     position: Vector2,
     font_size: f32,

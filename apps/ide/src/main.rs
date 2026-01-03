@@ -1,6 +1,10 @@
 use raylib::prelude::*;
 use sapling_app::App;
-use sapling_gui::{RaylibRenderer, prelude::*};
+use sapling_gui::{RaylibRenderer, RaylibRendererState, prelude::*};
+
+use crate::components::panel::Panel;
+
+mod components;
 
 fn main() {
   let mut app = App::new(128);
@@ -8,12 +12,12 @@ fn main() {
   let (mut rl, thread) = raylib::init()
     .size(1280, 720)
     .title("Sapling IDE")
-    .msaa_4x()
     .vsync()
     .resizable()
     .build();
 
   let mut theme = Theme::new(&mut rl, &thread);
+  let mut renderer_state = RaylibRendererState::new(&mut rl, &thread);
 
   while !rl.window_should_close() {
     let width = rl.get_render_width();
@@ -21,10 +25,10 @@ fn main() {
 
     let mut d = rl.begin_drawing(&thread);
 
-    d.clear_background(Color::from_hex("212121").unwrap());
+    d.clear_background(theme.color_background);
 
     let mut orchestrator = Orchestrator::new();
-    let mut renderer = RaylibRenderer::new(d);
+    let mut renderer = RaylibRenderer::new(d, &mut renderer_state, thread.clone());
     let (rendering_duration, layouting_duration) = orchestrator.construct_and_render(
       RootView,
       width as f32,
@@ -35,7 +39,7 @@ fn main() {
     let mut d = renderer.end();
 
     let fps = d.get_fps();
-    theme.primary_font.as_mut().unwrap().draw_text(
+    theme.font_primary.as_mut().unwrap().draw_text(
       &mut d,
       &format!(
         "FPS: {}\nFacts: {}\nRender {:.2}ms\nLayout {:.2}ms",
@@ -76,6 +80,14 @@ impl Component for RootView {
           ])
           .build(context);
       })
+      .build(context);
+
+    Panel
+      .with_layout(vec![
+        ElementConstraints::relative_top(32.0),
+        ElementConstraints::relative_left(32.0),
+        ElementConstraints::fixed_size(500.0, 500.0),
+      ])
       .build(context);
   }
 }

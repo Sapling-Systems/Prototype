@@ -1,5 +1,6 @@
 pub use crate::base::{
-  LayoutView, StyledView, TextHorizontalAlignment, TextVerticalAlignment, TextView, ViewStyle,
+  DropShadowStyle, FormattedTextView, LayoutView, StyledView, TextFormat, TextHorizontalAlignment,
+  TextVerticalAlignment, TextView, ViewStyle,
 };
 pub use crate::component::{Component, ComponentElement, LayoutedComponent, ParentComponent};
 pub use crate::layout::{
@@ -7,7 +8,7 @@ pub use crate::layout::{
   ElementConstraintVariable, ElementConstraints, ResolvedLayout,
 };
 pub use crate::orchestrator::{Element, ElementContext, Orchestrator};
-pub use crate::renderer::Renderer;
+pub use crate::renderer::{RenderFilter, Renderer};
 pub use crate::theme::{FontVariant, Theme};
 
 pub use sapling_gui_macro::{constraint, constraint1};

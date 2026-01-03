@@ -4,6 +4,12 @@ use raylib::{
 };
 
 pub trait Renderer {
+  fn draw_with_filter(
+    &mut self,
+    _ty: RenderFilter,
+    _filter: Box<dyn for<'a> FnOnce(Box<dyn Renderer + 'a>)>,
+  ) {
+  }
   fn draw_text(
     &mut self,
     _font: &mut Font,
@@ -24,6 +30,10 @@ pub trait Renderer {
   }
 }
 
+pub enum RenderFilter {
+  Blur { amount: f32 },
+}
+
 pub struct NoopRenderer;
 
 impl Renderer for NoopRenderer {}
@@ -31,6 +41,6 @@ impl Renderer for NoopRenderer {}
 mod raylib_renderer;
 mod raylib_util;
 
-pub use raylib_renderer::RaylibRenderer;
+pub use raylib_renderer::{RaylibRenderer, RaylibRendererState};
 
 use crate::font::Font;
