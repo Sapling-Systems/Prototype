@@ -28,29 +28,6 @@ pub struct Orchestrator {
   mutable_state: HashMap<ComponentStateKey, Box<dyn Any>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct ComponentStateKey {
-  key: String,
-  parent_key: String,
-  type_id: TypeId,
-}
-
-#[derive(Debug, Clone)]
-pub struct DebugAllocatedElement {
-  pub id: usize,
-  pub debug_info: String,
-  pub component_name: String,
-  pub layout: ResolvedLayout,
-  pub children: Vec<DebugAllocatedElement>,
-}
-
-struct RootVars {
-  render_left: KasuariVariable,
-  render_top: KasuariVariable,
-  render_right: KasuariVariable,
-  render_bottom: KasuariVariable,
-}
-
 impl Orchestrator {
   pub fn new(debug_enabled: bool) -> Self {
     Orchestrator {
@@ -90,6 +67,7 @@ impl Orchestrator {
       component: Some(Box::new(root)),
       direct_child_component_occurrences: HashMap::new(),
       constraints: vec![],
+      debug_constraints: None,
       layout_vars: AllocatedElementLayoutVars {
         self_bottom: self.root_vars.render_bottom,
         self_right: self.root_vars.render_right,
@@ -104,6 +82,7 @@ impl Orchestrator {
       parent_element: Some(0),
       elements: &mut self.elements,
       root_vars: &self.root_vars,
+      debug_enabled: self.debug_enabled,
       render_width: width,
       render_height: height,
       prev_debug_node: &self.debug_tree,
@@ -135,6 +114,7 @@ impl Orchestrator {
           parent_element: element.parent_element,
           render_height: height,
           render_width: width,
+          debug_enabled: self.debug_enabled,
           root_vars: &self.root_vars,
           elements: &mut self.elements,
           prev_debug_node: &self.debug_tree,
@@ -240,6 +220,10 @@ impl Orchestrator {
 
     DebugAllocatedElement {
       id: element_id,
+      key: element.key.clone(),
+      layout_constraints: ElementConstraints {
+        constraints: vec![],
+      },
       debug_info,
       component_name,
       layout,
@@ -286,6 +270,7 @@ pub struct ElementContext<'a> {
   root_vars: &'a RootVars,
   render_width: f32,
   render_height: f32,
+  debug_enabled: bool,
   pub prev_debug_node: &'a Option<DebugAllocatedElement>,
   pub theme: &'a mut Theme,
   pub app: &'a mut App,
@@ -295,6 +280,7 @@ struct AllocatedElement {
   parent_element: Option<usize>,
   component: Option<Box<dyn Component>>,
   constraints: Vec<KasuariConstraint>,
+  debug_constraints: Option<ElementConstraints>,
   layout_vars: AllocatedElementLayoutVars,
   direct_child_component_occurrences: HashMap<TypeId, usize>,
   key: String,
@@ -305,6 +291,31 @@ struct AllocatedElementLayoutVars {
   self_top: KasuariVariable,
   self_right: KasuariVariable,
   self_bottom: KasuariVariable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ComponentStateKey {
+  key: String,
+  parent_key: String,
+  type_id: TypeId,
+}
+
+#[derive(Debug, Clone)]
+pub struct DebugAllocatedElement {
+  pub id: usize,
+  pub key: String,
+  pub debug_info: String,
+  pub component_name: String,
+  pub layout: ResolvedLayout,
+  pub layout_constraints: ElementConstraints,
+  pub children: Vec<DebugAllocatedElement>,
+}
+
+struct RootVars {
+  render_left: KasuariVariable,
+  render_top: KasuariVariable,
+  render_right: KasuariVariable,
+  render_bottom: KasuariVariable,
 }
 
 impl<'a> ElementContext<'a> {
@@ -329,6 +340,7 @@ impl<'a> ElementContext<'a> {
     self.elements.push(AllocatedElement {
       parent_element: self.parent_element,
       component: Some(Box::new(component)),
+      debug_constraints: None,
       constraints: Vec::new(),
       key,
       direct_child_component_occurrences: HashMap::new(),
@@ -346,6 +358,7 @@ impl<'a> ElementContext<'a> {
     let mut component = self.elements[element.id].component.take().unwrap();
     component.construct(&mut ElementContext {
       elements: self.elements,
+      debug_enabled: self.debug_enabled,
       parent_element: Some(element.id),
       render_height: self.render_height,
       render_width: self.render_width,
@@ -363,6 +376,7 @@ impl<'a> ElementContext<'a> {
       parent_element: Some(parent_element.id),
       render_height: self.render_height,
       render_width: self.render_width,
+      debug_enabled: self.debug_enabled,
       root_vars: self.root_vars,
       prev_debug_node: self.prev_debug_node,
       theme: self.theme,
@@ -375,6 +389,17 @@ impl<'a> ElementContext<'a> {
     element: &Element,
     constraints: Vec<ElementConstraint>,
   ) {
+    if self.debug_enabled {
+      let element = self.elements.get_mut(element.id).unwrap();
+      if element.debug_constraints.is_none() {
+        element.debug_constraints = Some(ElementConstraints {
+          constraints: vec![],
+        });
+      }
+      let debug_constraints = element.debug_constraints.as_mut().unwrap();
+      debug_constraints.constraints.extend(constraints.clone());
+    }
+
     let id = element.id;
     let element = self.elements.get(id).unwrap();
     let constraints = constraints

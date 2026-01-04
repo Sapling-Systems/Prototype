@@ -10,6 +10,7 @@ pub struct ResolvedLayout {
   pub y: f32,
 }
 
+#[derive(Debug, Clone)]
 pub struct ElementConstraints {
   pub constraints: Vec<ElementConstraint>,
 }
@@ -157,29 +158,33 @@ impl ElementConstraints {
   }
 }
 
+#[derive(Debug, Clone)]
 pub struct ElementConstraint {
   pub operator: ElementConstraintOperator,
   pub expression: ElementConstraintExpression,
   pub strength: f32,
 }
 
+#[derive(Debug, Clone)]
 pub struct ElementConstraintExpression {
   pub constant: f32,
   pub terms: Vec<ElementConstraintTerm>,
 }
 
+#[derive(Debug, Clone)]
 pub struct ElementConstraintTerm {
   pub variable: ElementConstraintVariable,
   pub coefficient: f32,
 }
 
+#[derive(Debug, Clone)]
 pub enum ElementConstraintOperator {
   Equal,
   GreaterOrEqual,
   LessOrEqual,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ElementConstraintVariable {
   ScreenWidth,
   ScreenHeight,
