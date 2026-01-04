@@ -1,9 +1,28 @@
 use sapling_gui::prelude::*;
 
-pub struct Panel;
+pub struct PanelView {
+  content: ChildrenProperty,
+}
 
-impl Component for Panel {
-  fn construct(&self, context: &mut ElementContext) {
+impl std::fmt::Debug for PanelView {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("PanelView").finish()
+  }
+}
+
+impl PanelView {
+  pub fn new() -> Self {
+    Self { content: None }
+  }
+
+  pub fn with_content<F: FnOnce(&mut ElementContext) + 'static>(mut self, factory: F) -> Self {
+    self.content = Some(Box::new(factory));
+    self
+  }
+}
+
+impl Component for PanelView {
+  fn construct(&mut self, context: &mut ElementContext) {
     let _title_bar = StyledView::new()
       .with_background_color(context.theme.color_primary)
       .with_border_radius_even(context.theme.radius_default)
@@ -26,6 +45,7 @@ impl Component for Panel {
       )])
       .build(context);
 
+    let content_children = self.content.take().unwrap();
     let _content = StyledView::new()
       .with_background_color(context.theme.color_background_contrast)
       .with_border_radius_even(context.theme.radius_default)
@@ -36,6 +56,9 @@ impl Component for Panel {
         0.0,
         0.0,
       )])
+      .with_children(|context| {
+        content_children(context);
+      })
       .build(context);
   }
 }

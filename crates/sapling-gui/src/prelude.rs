@@ -2,10 +2,14 @@ pub use crate::base::{
   DropShadowStyle, FormattedTextView, LayoutView, StyledView, TextFormat, TextHorizontalAlignment,
   TextVerticalAlignment, TextView, ViewStyle,
 };
-pub use crate::component::{Component, ComponentElement, LayoutedComponent, ParentComponent};
+pub use crate::component::{
+  ChildrenProperty, Component, ComponentElement, LayoutedComponent, ParentComponent, RenderContext,
+};
+pub use crate::input::InputState;
 pub use crate::layout::{
-  ElementConstraint, ElementConstraintExpression, ElementConstraintOperator, ElementConstraintTerm,
-  ElementConstraintVariable, ElementConstraints, ResolvedLayout,
+  ConstraintTermValue, ElementConstraint, ElementConstraintExpression, ElementConstraintOperator,
+  ElementConstraintTerm, ElementConstraintVariable, ElementConstraints, IntoConstraintTerm,
+  ResolvedLayout,
 };
 pub use crate::orchestrator::{Element, ElementContext, Orchestrator};
 pub use crate::renderer::{RenderFilter, Renderer};

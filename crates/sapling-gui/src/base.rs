@@ -4,18 +4,20 @@ use raylib::{
 };
 
 use crate::{
-  component::Component,
+  component::{Component, RenderContext},
   layout::ResolvedLayout,
   prelude::{RenderFilter, Renderer},
   theme::{FontVariant, Theme},
 };
 
 /// Utility view that serves as a container for other views, does not render anything itself.
+#[derive(Debug)]
 pub struct LayoutView;
 
 impl Component for LayoutView {}
 
 /// General purpose view that renders a stylable element supporting basic shapes.
+#[derive(Debug)]
 pub struct StyledView {
   style: ViewStyle,
 }
@@ -61,7 +63,7 @@ impl StyledView {
 }
 
 impl Component for StyledView {
-  fn render(&self, layout: &ResolvedLayout, renderer: &mut dyn Renderer, _theme: &mut Theme) {
+  fn render(&self, context: &mut RenderContext) {
     let radii = Vector4::new(
       self.style.border_radius.0,
       self.style.border_radius.1,
@@ -70,9 +72,9 @@ impl Component for StyledView {
     );
 
     if let Some(shadow) = &self.style.drop_shadow {
-      let layout = layout.clone();
+      let layout = context.layout.clone();
       let shadow = shadow.clone();
-      renderer.draw_with_filter(
+      context.renderer.draw_with_filter(
         RenderFilter::Blur {
           amount: shadow.blur_radius,
         },
@@ -92,12 +94,12 @@ impl Component for StyledView {
     }
 
     if self.style.border_width > 0.0 {
-      renderer.draw_rectangle_border(
+      context.renderer.draw_rectangle_border(
         Rectangle {
-          x: layout.x,
-          y: layout.y,
-          height: layout.height,
-          width: layout.width,
+          x: context.layout.x,
+          y: context.layout.y,
+          height: context.layout.height,
+          width: context.layout.width,
         },
         radii,
         self.style.border_color,
@@ -105,12 +107,12 @@ impl Component for StyledView {
       );
     }
 
-    renderer.draw_rectangle(
+    context.renderer.draw_rectangle(
       Rectangle {
-        x: layout.x + self.style.border_width / 2.0,
-        y: layout.y + self.style.border_width / 2.0,
-        height: layout.height - self.style.border_width,
-        width: layout.width - self.style.border_width,
+        x: context.layout.x + self.style.border_width / 2.0,
+        y: context.layout.y + self.style.border_width / 2.0,
+        height: context.layout.height - self.style.border_width,
+        width: context.layout.width - self.style.border_width,
       },
       inner_radii(
         radii,
@@ -122,6 +124,7 @@ impl Component for StyledView {
   }
 }
 
+#[derive(Debug)]
 pub struct ViewStyle {
   background_color: Color,
   border_radius: (f32, f32, f32, f32),
@@ -160,6 +163,7 @@ fn inner_radii(outer: Vector4, border_thickness: f32, inside_only: bool) -> Vect
   }
 }
 
+#[derive(Debug)]
 pub struct TextView {
   variant: FontVariant,
   text: String,
@@ -189,25 +193,29 @@ impl TextView {
 }
 
 impl Component for TextView {
-  fn render(&self, layout: &ResolvedLayout, renderer: &mut dyn Renderer, theme: &mut Theme) {
-    let font_config = theme.text_config(self.variant);
+  fn render(&self, context: &mut RenderContext) {
+    let font_config = context.theme.text_config(self.variant);
     let expected_size = font_config
       .font
       .calculate_text_size(&self.text, font_config.size);
 
     let x = match self.horizontal_alignment {
-      TextHorizontalAlignment::Left => layout.x,
-      TextHorizontalAlignment::Center => (layout.width - expected_size.x) / 2.0 + layout.x,
-      TextHorizontalAlignment::Right => layout.width - expected_size.x + layout.x,
+      TextHorizontalAlignment::Left => context.layout.x,
+      TextHorizontalAlignment::Center => {
+        (context.layout.width - expected_size.x) / 2.0 + context.layout.x
+      }
+      TextHorizontalAlignment::Right => context.layout.width - expected_size.x + context.layout.x,
     };
 
     let y = match self.vertical_alignment {
-      TextVerticalAlignment::Top => layout.y,
-      TextVerticalAlignment::Center => (layout.height - expected_size.y) / 2.0 + layout.y,
-      TextVerticalAlignment::Bottom => layout.height - expected_size.y + layout.y,
+      TextVerticalAlignment::Top => context.layout.y,
+      TextVerticalAlignment::Center => {
+        (context.layout.height - expected_size.y) / 2.0 + context.layout.y
+      }
+      TextVerticalAlignment::Bottom => context.layout.height - expected_size.y + context.layout.y,
     };
 
-    renderer.draw_text(
+    context.renderer.draw_text(
       font_config.font,
       &self.text,
       Vector2::new(x, y),
@@ -217,18 +225,21 @@ impl Component for TextView {
   }
 }
 
+#[derive(Debug)]
 pub enum TextHorizontalAlignment {
   Left,
   Center,
   Right,
 }
 
+#[derive(Debug)]
 pub enum TextVerticalAlignment {
   Top,
   Center,
   Bottom,
 }
 
+#[derive(Debug)]
 pub struct FormattedTextView {
   texts: Vec<TextFormat>,
   vertical_alignment: TextVerticalAlignment,
@@ -261,13 +272,13 @@ impl FormattedTextView {
 }
 
 impl Component for FormattedTextView {
-  fn render(&self, layout: &ResolvedLayout, renderer: &mut dyn Renderer, theme: &mut Theme) {
+  fn render(&self, context: &mut RenderContext) {
     let expected_sizes = self
       .texts
       .iter()
       .enumerate()
       .map(|(index, text)| {
-        let font_config = theme.text_config(text.variant);
+        let font_config = context.theme.text_config(text.variant);
         let with_space = index > 0;
         font_config.font.calculate_text_size(
           &format!("{}{}", if with_space { " " } else { "" }, text.text),
@@ -283,22 +294,26 @@ impl Component for FormattedTextView {
       .unwrap_or_default();
 
     let mut base_x = match self.horizontal_alignment {
-      TextHorizontalAlignment::Left => layout.x,
-      TextHorizontalAlignment::Center => (layout.width - expected_size.x) / 2.0 + layout.x,
-      TextHorizontalAlignment::Right => layout.width - expected_size.x + layout.x,
+      TextHorizontalAlignment::Left => context.layout.x,
+      TextHorizontalAlignment::Center => {
+        (context.layout.width - expected_size.x) / 2.0 + context.layout.x
+      }
+      TextHorizontalAlignment::Right => context.layout.width - expected_size.x + context.layout.x,
     };
 
     let base_y = match self.vertical_alignment {
-      TextVerticalAlignment::Top => layout.y,
-      TextVerticalAlignment::Center => (layout.height - expected_size.y) / 2.0 + layout.y,
-      TextVerticalAlignment::Bottom => layout.height - expected_size.y + layout.y,
+      TextVerticalAlignment::Top => context.layout.y,
+      TextVerticalAlignment::Center => {
+        (context.layout.height - expected_size.y) / 2.0 + context.layout.y
+      }
+      TextVerticalAlignment::Bottom => context.layout.height - expected_size.y + context.layout.y,
     };
 
     for (index, (text, size)) in self.texts.iter().zip(expected_sizes).enumerate() {
       let with_space = index > 0;
-      let font_config = theme.text_config(text.variant);
+      let font_config = context.theme.text_config(text.variant);
       let draw_text = &format!("{}{}", if with_space { " " } else { "" }, text.text);
-      renderer.draw_text(
+      context.renderer.draw_text(
         font_config.font,
         draw_text,
         Vector2::new(base_x, base_y),
@@ -310,6 +325,7 @@ impl Component for FormattedTextView {
   }
 }
 
+#[derive(Debug)]
 pub struct TextFormat {
   variant: FontVariant,
   text: String,
@@ -318,5 +334,37 @@ pub struct TextFormat {
 impl TextFormat {
   pub fn new(variant: FontVariant, text: String) -> Self {
     Self { variant, text }
+  }
+}
+
+pub struct Pressable {
+  on_press: Box<dyn Fn() + 'static>,
+}
+
+impl Pressable {
+  pub fn new<F: Fn() + 'static>(on_press: F) -> Self {
+    Self {
+      on_press: Box::new(on_press),
+    }
+  }
+}
+
+impl std::fmt::Debug for Pressable {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("Pressable").finish()
+  }
+}
+
+impl Component for Pressable {
+  fn render(&self, context: &mut RenderContext) {
+    if let Some(pressed_location) = context.input_state.mouse_press {
+      if pressed_location.x >= context.layout.x
+        && pressed_location.y >= context.layout.y
+        && pressed_location.x < context.layout.x + context.layout.width
+        && pressed_location.y < context.layout.y + context.layout.height
+      {
+        (*self.on_press)();
+      }
+    }
   }
 }

@@ -1,6 +1,7 @@
 use sapling_data_model::{Fact, Query, Subject};
 use sapling_query_engine::{
   Database, DatabaseWatcher, FoundFact, QueryEngine, SharedVariableAllocator, SharedVariableBank,
+  System,
 };
 
 pub use crate::plugin::{AppPlugin, AppPluginInstallContext};
@@ -59,6 +60,11 @@ impl App {
 
   pub fn get_global_by_name(&self, name: &str) -> Option<Subject> {
     self.registry.get_global_by_name(name)
+  }
+
+  pub fn create_named_subject(&mut self, name: &str) -> Subject {
+    self.registry.create_global(&mut self.database, name.into());
+    System::new_named_static(&mut self.database, name)
   }
 
   pub fn query_once<'a>(&'a self, query: &Query) -> impl Iterator<Item = FoundFact<'a>> {

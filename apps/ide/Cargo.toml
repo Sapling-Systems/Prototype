@@ -7,4 +7,6 @@ edition.workspace = true
 raylib.workspace = true
 anyhow.workspace = true
 sapling-app.workspace = true
+sapling-data-model.workspace = true
+sapling-query-engine.workspace = true
 sapling-gui.workspace = true

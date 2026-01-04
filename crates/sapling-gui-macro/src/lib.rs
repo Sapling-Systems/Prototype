@@ -62,6 +62,8 @@ enum Term {
   RuntimeConstant(Expr),
   Variable { name: String, coefficient: f32 },
   VariableWithRuntimeCoeff { name: String, coefficient: Expr },
+  RuntimeVariable { expr: Expr, coefficient: f32 },
+  RuntimeVariableWithRuntimeCoeff { expr: Expr, coefficient: Expr },
 }
 
 impl Term {
@@ -77,6 +79,16 @@ impl Term {
         name: name.clone(),
         coefficient: syn::parse_quote! { -(#coefficient) },
       },
+      Term::RuntimeVariable { expr, coefficient } => Term::RuntimeVariable {
+        expr: expr.clone(),
+        coefficient: -coefficient,
+      },
+      Term::RuntimeVariableWithRuntimeCoeff { expr, coefficient } => {
+        Term::RuntimeVariableWithRuntimeCoeff {
+          expr: expr.clone(),
+          coefficient: syn::parse_quote! { -(#coefficient) },
+        }
+      }
     }
   }
 
@@ -92,6 +104,16 @@ impl Term {
         name: name.clone(),
         coefficient: syn::parse_quote! { (#coefficient) * #scalar },
       },
+      Term::RuntimeVariable { expr, coefficient } => Term::RuntimeVariable {
+        expr: expr.clone(),
+        coefficient: coefficient * scalar,
+      },
+      Term::RuntimeVariableWithRuntimeCoeff { expr, coefficient } => {
+        Term::RuntimeVariableWithRuntimeCoeff {
+          expr: expr.clone(),
+          coefficient: syn::parse_quote! { (#coefficient) * #scalar },
+        }
+      }
     }
   }
 
@@ -109,6 +131,16 @@ impl Term {
         name: name.clone(),
         coefficient: syn::parse_quote! { (#coefficient) * (#scalar_expr) },
       },
+      Term::RuntimeVariable { expr, coefficient } => Term::RuntimeVariableWithRuntimeCoeff {
+        expr: expr.clone(),
+        coefficient: syn::parse_quote! { #coefficient * (#scalar_expr) },
+      },
+      Term::RuntimeVariableWithRuntimeCoeff { expr, coefficient } => {
+        Term::RuntimeVariableWithRuntimeCoeff {
+          expr: expr.clone(),
+          coefficient: syn::parse_quote! { (#coefficient) * (#scalar_expr) },
+        }
+      }
     }
   }
 
@@ -124,6 +156,16 @@ impl Term {
         name: name.clone(),
         coefficient: syn::parse_quote! { (#coefficient) / #scalar },
       },
+      Term::RuntimeVariable { expr, coefficient } => Term::RuntimeVariable {
+        expr: expr.clone(),
+        coefficient: coefficient / scalar,
+      },
+      Term::RuntimeVariableWithRuntimeCoeff { expr, coefficient } => {
+        Term::RuntimeVariableWithRuntimeCoeff {
+          expr: expr.clone(),
+          coefficient: syn::parse_quote! { (#coefficient) / #scalar },
+        }
+      }
     }
   }
 
@@ -141,6 +183,16 @@ impl Term {
         name: name.clone(),
         coefficient: syn::parse_quote! { (#coefficient) / (#scalar_expr) },
       },
+      Term::RuntimeVariable { expr, coefficient } => Term::RuntimeVariableWithRuntimeCoeff {
+        expr: expr.clone(),
+        coefficient: syn::parse_quote! { #coefficient / (#scalar_expr) },
+      },
+      Term::RuntimeVariableWithRuntimeCoeff { expr, coefficient } => {
+        Term::RuntimeVariableWithRuntimeCoeff {
+          expr: expr.clone(),
+          coefficient: syn::parse_quote! { (#coefficient) / (#scalar_expr) },
+        }
+      }
     }
   }
 }
@@ -157,6 +209,8 @@ fn is_constraint_variable(name: &str) -> bool {
       | "self_right"
       | "self_top"
       | "self_bottom"
+      | "screen_width"
+      | "screen_height"
   )
 }
 
@@ -180,11 +234,11 @@ fn parse_expr_to_terms(expr: &Expr) -> Vec<Term> {
           terms
         }
         BinOp::Mul(_) => {
-          // Handle multiplication: one side must be a constant
+          // Handle multiplication: one side must be a constant or both are runtime values
           let left_terms = parse_expr_to_terms(left);
           let right_terms = parse_expr_to_terms(right);
 
-          // Check if left is a compile-time constant
+          // Check if left is a compile-time constant or special term
           if left_terms.len() == 1 {
             match &left_terms[0] {
               Term::Constant(scalar) => {
@@ -196,11 +250,42 @@ fn parse_expr_to_terms(expr: &Expr) -> Vec<Term> {
                   .map(|t| t.multiply_runtime(left))
                   .collect();
               }
+              Term::Variable { .. } | Term::VariableWithRuntimeCoeff { .. } => {
+                // Constraint variable on left - check if right is a runtime value
+                if right_terms.len() == 1 && matches!(right_terms[0], Term::RuntimeVariable { .. })
+                {
+                  return left_terms
+                    .iter()
+                    .map(|t| t.multiply_runtime(right))
+                    .collect();
+                }
+              }
+              Term::RuntimeVariable { .. } => {
+                // If right is a constant or constraint variable, multiply the runtime variable by it
+                if right_terms.len() == 1 {
+                  match &right_terms[0] {
+                    Term::Constant(scalar) => {
+                      return left_terms.iter().map(|t| t.multiply(*scalar)).collect();
+                    }
+                    Term::RuntimeConstant(_) => {
+                      return left_terms
+                        .iter()
+                        .map(|t| t.multiply_runtime(right))
+                        .collect();
+                    }
+                    Term::RuntimeVariable { .. } => {
+                      // Both are runtime values, treat whole expression as runtime constant
+                      return vec![Term::RuntimeConstant(expr.clone())];
+                    }
+                    _ => {}
+                  }
+                }
+              }
               _ => {}
             }
           }
 
-          // Check if right is a constant
+          // Check if right is a constant or special term
           if right_terms.len() == 1 {
             match &right_terms[0] {
               Term::Constant(scalar) => {
@@ -212,11 +297,62 @@ fn parse_expr_to_terms(expr: &Expr) -> Vec<Term> {
                   .map(|t| t.multiply_runtime(right))
                   .collect();
               }
+              Term::Variable { .. } | Term::VariableWithRuntimeCoeff { .. } => {
+                // Constraint variable on right - check if left is a runtime value
+                if left_terms.len() == 1 && matches!(left_terms[0], Term::RuntimeVariable { .. }) {
+                  return right_terms
+                    .iter()
+                    .map(|t| t.multiply_runtime(left))
+                    .collect();
+                }
+              }
+              Term::RuntimeVariable { .. } => {
+                // If left is a constant or constraint variable, multiply the runtime variable by it
+                if left_terms.len() == 1 {
+                  match &left_terms[0] {
+                    Term::Constant(scalar) => {
+                      return right_terms.iter().map(|t| t.multiply(*scalar)).collect();
+                    }
+                    Term::RuntimeConstant(_) => {
+                      return right_terms
+                        .iter()
+                        .map(|t| t.multiply_runtime(left))
+                        .collect();
+                    }
+                    Term::RuntimeVariable { .. } => {
+                      // Both are runtime values, treat whole expression as runtime constant
+                      return vec![Term::RuntimeConstant(expr.clone())];
+                    }
+                    _ => {}
+                  }
+                }
+              }
               _ => {}
             }
           }
 
-          abort!(expr, "Multiplication must involve at least one constant");
+          // If both sides are runtime values (constants or runtime variables), treat as runtime constant
+          let left_has_constraint_vars = left_terms.iter().any(|t| {
+            matches!(
+              t,
+              Term::Variable { .. } | Term::VariableWithRuntimeCoeff { .. }
+            )
+          });
+          let right_has_constraint_vars = right_terms.iter().any(|t| {
+            matches!(
+              t,
+              Term::Variable { .. } | Term::VariableWithRuntimeCoeff { .. }
+            )
+          });
+
+          if !left_has_constraint_vars && !right_has_constraint_vars {
+            return vec![Term::RuntimeConstant(expr.clone())];
+          }
+
+          abort!(
+            expr,
+            "Multiplication must involve at least one constant or both operands must be non-constraint values"
+          );
         }
         BinOp::Div(_) => {
           // Handle division: right side must be a constant
@@ -271,7 +407,7 @@ fn parse_expr_to_terms(expr: &Expr) -> Vec<Term> {
       }
     }
 
-    // Path (variable name or runtime constant)
+    // Path (variable name or runtime constant/variable)
     Expr::Path(expr_path) => {
       if expr_path.path.segments.len() == 1 {
         let ident = &expr_path.path.segments[0].ident;
@@ -284,17 +420,26 @@ fn parse_expr_to_terms(expr: &Expr) -> Vec<Term> {
             coefficient: 1.0,
           }]
         } else {
-          // Treat as a runtime constant expression
-          vec![Term::RuntimeConstant(expr.clone())]
+          // Treat as a runtime variable (could be constant or variable at runtime)
+          vec![Term::RuntimeVariable {
+            expr: expr.clone(),
+            coefficient: 1.0,
+          }]
         }
       } else {
-        // Complex path - treat as runtime constant
-        vec![Term::RuntimeConstant(expr.clone())]
+        // Complex path - treat as runtime variable
+        vec![Term::RuntimeVariable {
+          expr: expr.clone(),
+          coefficient: 1.0,
+        }]
       }
     }
 
-    // Any other expression type - treat as runtime constant
-    _ => vec![Term::RuntimeConstant(expr.clone())],
+    // Method call or any other expression - treat as runtime variable
+    _ => vec![Term::RuntimeVariable {
+      expr: expr.clone(),
+      coefficient: 1.0,
+    }],
   }
 }
 
@@ -304,6 +449,8 @@ fn map_variable_name(
   crate_name: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
   match name {
+    "screen_width" => quote! { #crate_name::prelude::ElementConstraintVariable::ScreenWidth },
+    "screen_height" => quote! { #crate_name::prelude::ElementConstraintVariable::ScreenHeight },
     "parent_left" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentLeft },
     "parent_right" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentRight },
     "parent_top" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentTop },
@@ -365,6 +512,7 @@ fn generate_element_constraint(
   let mut compile_time_constant = 0.0f32;
   let mut runtime_constant_exprs: Vec<Expr> = Vec::new();
   let mut var_terms: Vec<Term> = Vec::new();
+  let mut runtime_var_terms: Vec<Term> = Vec::new();
 
   for term in all_terms {
     match term {
@@ -377,42 +525,11 @@ fn generate_element_constraint(
       Term::Variable { .. } | Term::VariableWithRuntimeCoeff { .. } => {
         var_terms.push(term);
       }
+      Term::RuntimeVariable { .. } | Term::RuntimeVariableWithRuntimeCoeff { .. } => {
+        runtime_var_terms.push(term);
+      }
     }
   }
-
-  // Generate code for the constant
-  let constant_code = if runtime_constant_exprs.is_empty() {
-    quote! { #compile_time_constant }
-  } else {
-    let runtime_sum = runtime_constant_exprs.iter().fold(
-      quote! { #compile_time_constant },
-      |acc, expr| quote! { #acc + (#expr) },
-    );
-    runtime_sum
-  };
-
-  // Generate code for each variable term
-  let terms_code = var_terms.iter().map(|term| match term {
-    Term::Variable { name, coefficient } => {
-      let var_enum = map_variable_name(name, crate_name);
-      quote! {
-        #crate_name::prelude::ElementConstraintTerm {
-          variable: #var_enum,
-          coefficient: #coefficient,
-        }
-      }
-    }
-    Term::VariableWithRuntimeCoeff { name, coefficient } => {
-      let var_enum = map_variable_name(name, crate_name);
-      quote! {
-        #crate_name::prelude::ElementConstraintTerm {
-          variable: #var_enum,
-          coefficient: #coefficient,
-        }
-      }
-    }
-    _ => unreachable!(),
-  });
 
   // Determine the strength to use
   let strength_code = if let Some(strength_expr) = &input.strength {
@@ -421,18 +538,150 @@ fn generate_element_constraint(
     quote! { #crate_name::prelude::ElementConstraints::REQUIRED }
   };
 
-  // Generate the ElementConstraint code
-  quote! {
-      #crate_name::prelude::ElementConstraint {
-          operator: #operator,
-          expression: #crate_name::prelude::ElementConstraintExpression {
-              constant: #constant_code,
-              terms: vec![
-                  #(#terms_code),*
-              ],
-          },
-          strength: #strength_code,
+  // If there are no runtime variables, we can generate a simple static constraint
+  if runtime_var_terms.is_empty() {
+    // Generate code for the constant
+    let constant_code = if runtime_constant_exprs.is_empty() {
+      quote! { #compile_time_constant }
+    } else {
+      runtime_constant_exprs.iter().fold(
+        quote! { #compile_time_constant },
+        |acc, expr| quote! { #acc + (#expr) },
+      )
+    };
+
+    // Generate code for each variable term
+    let terms_code = var_terms.iter().map(|term| match term {
+      Term::Variable { name, coefficient } => {
+        let var_enum = map_variable_name(name, crate_name);
+        quote! {
+          #crate_name::prelude::ElementConstraintTerm {
+            variable: #var_enum,
+            coefficient: #coefficient,
+          }
+        }
       }
+      Term::VariableWithRuntimeCoeff { name, coefficient } => {
+        let var_enum = map_variable_name(name, crate_name);
+        quote! {
+          #crate_name::prelude::ElementConstraintTerm {
+            variable: #var_enum,
+            coefficient: #coefficient,
+          }
+        }
+      }
+      _ => unreachable!(),
+    });
+
+    // Generate the ElementConstraint code
+    quote! {
+        #crate_name::prelude::ElementConstraint {
+            operator: #operator,
+            expression: #crate_name::prelude::ElementConstraintExpression {
+                constant: #constant_code,
+                terms: vec![
+                    #(#terms_code),*
+                ],
+            },
+            strength: #strength_code,
+        }
+    }
+  } else {
+    // We have runtime variables, so we need to build the constraint dynamically
+
+    // Start with compile-time constant
+    let mut constant_init = quote! { #compile_time_constant };
+
+    // Add runtime constant expressions
+    for expr in &runtime_constant_exprs {
+      constant_init = quote! { #constant_init + (#expr) };
+    }
+
+    // Generate code for static variable terms
+    let static_terms_code = var_terms.iter().map(|term| match term {
+      Term::Variable { name, coefficient } => {
+        let var_enum = map_variable_name(name, crate_name);
+        quote! {
+          #crate_name::prelude::ElementConstraintTerm {
+            variable: #var_enum,
+            coefficient: #coefficient,
+          }
+        }
+      }
+      Term::VariableWithRuntimeCoeff { name, coefficient } => {
+        let var_enum = map_variable_name(name, crate_name);
+        quote! {
+          #crate_name::prelude::ElementConstraintTerm {
+            variable: #var_enum,
+            coefficient: #coefficient,
+          }
+        }
+      }
+      _ => unreachable!(),
+    });
+
+    // Generate code to evaluate runtime variables
+    let runtime_var_eval_code = runtime_var_terms.iter().map(|term| match term {
+      Term::RuntimeVariable { expr, coefficient } => {
+        quote! {
+          {
+            use #crate_name::prelude::IntoConstraintTerm;
+            match (#expr).into_constraint_term() {
+              #crate_name::prelude::ConstraintTermValue::Constant(c) => {
+                __constraint_constant += c * #coefficient;
+              }
+              #crate_name::prelude::ConstraintTermValue::Variable(v) => {
+                __constraint_terms.push(#crate_name::prelude::ElementConstraintTerm {
+                  variable: v,
+                  coefficient: #coefficient,
+                });
+              }
+            }
+          }
+        }
+      }
+      Term::RuntimeVariableWithRuntimeCoeff { expr, coefficient } => {
+        quote! {
+          {
+            use #crate_name::prelude::IntoConstraintTerm;
+            let __coeff = #coefficient;
+            match (#expr).into_constraint_term() {
+              #crate_name::prelude::ConstraintTermValue::Constant(c) => {
+                __constraint_constant += c * __coeff;
+              }
+              #crate_name::prelude::ConstraintTermValue::Variable(v) => {
+                __constraint_terms.push(#crate_name::prelude::ElementConstraintTerm {
+                  variable: v,
+                  coefficient: __coeff,
+                });
+              }
+            }
+          }
+        }
+      }
+      _ => unreachable!(),
+    });
+
+    // Generate the ElementConstraint code with runtime evaluation
+    quote! {
+        {
+          let mut __constraint_constant: f32 = #constant_init;
+          let mut __constraint_terms = vec![
+              #(#static_terms_code),*
+          ];
+
+          #(#runtime_var_eval_code)*
+
+          #crate_name::prelude::ElementConstraint {
+              operator: #operator,
+              expression: #crate_name::prelude::ElementConstraintExpression {
+                  constant: __constraint_constant,
+                  terms: __constraint_terms,
+              },
+              strength: #strength_code,
+          }
+        }
+    }
   }
 }
 

@@ -1,5 +1,7 @@
 use sapling_gui_macro::constraint1;
 
+use crate::prelude::Element;
+
 #[derive(Debug, Clone)]
 pub struct ResolvedLayout {
   pub width: f32,
@@ -21,6 +23,24 @@ impl ElementConstraints {
       constraint.strength = Self::WEAK
     }
     self
+  }
+
+  pub fn absolute_position(x: f32, y: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_left == x), constraint1!(self_top == y)],
+    }
+  }
+
+  pub fn absolute_top(spacing: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_top == spacing)],
+    }
+  }
+
+  pub fn absolute_right(spacing: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_right == screen_width - spacing)],
+    }
   }
 
   pub fn cover_parent_padding(
@@ -117,6 +137,24 @@ impl ElementConstraints {
       ],
     }
   }
+
+  pub fn anchor_to_right_of(element: Element, spacing: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_left == element.right() + spacing)],
+    }
+  }
+
+  pub fn anchor_to_top_of(element: Element, spacing: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_top == element.top() + spacing)],
+    }
+  }
+
+  pub fn anchor_to_bottom_of(element: Element, spacing: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_bottom == element.bottom() + spacing)],
+    }
+  }
 }
 
 pub struct ElementConstraint {
@@ -141,7 +179,10 @@ pub enum ElementConstraintOperator {
   LessOrEqual,
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum ElementConstraintVariable {
+  ScreenWidth,
+  ScreenHeight,
   ParentLeft,
   ParentRight,
   ParentTop,
@@ -150,4 +191,32 @@ pub enum ElementConstraintVariable {
   SelfRight,
   SelfTop,
   SelfBottom,
+  ElementLeft(Element),
+  ElementRight(Element),
+  ElementTop(Element),
+  ElementBottom(Element),
+}
+
+/// Trait for types that can be converted to constraint terms.
+/// This allows both constants (f32) and variables (ElementConstraintVariable)
+/// to be used in constraint expressions.
+pub trait IntoConstraintTerm {
+  fn into_constraint_term(self) -> ConstraintTermValue;
+}
+
+pub enum ConstraintTermValue {
+  Constant(f32),
+  Variable(ElementConstraintVariable),
+}
+
+impl IntoConstraintTerm for f32 {
+  fn into_constraint_term(self) -> ConstraintTermValue {
+    ConstraintTermValue::Constant(self)
+  }
+}
+
+impl IntoConstraintTerm for ElementConstraintVariable {
+  fn into_constraint_term(self) -> ConstraintTermValue {
+    ConstraintTermValue::Variable(self)
+  }
 }

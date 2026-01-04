@@ -1,5 +1,9 @@
+use std::{any::Any, fmt::Debug};
+
 use crate::{
-  layout::{ElementConstraint, ElementConstraints, ResolvedLayout},
+  base::Pressable,
+  input::InputState,
+  layout::{ElementConstraints, ResolvedLayout},
   orchestrator::{Element, ElementContext},
   prelude::Renderer,
   theme::Theme,
@@ -15,18 +19,37 @@ pub struct ParentComponent<T: ComponentElement> {
   component: T,
 }
 
-pub trait ComponentElement: Sized {
+pub trait ComponentElement: Sized + Debug + 'static {
   fn with_children<F: FnOnce(&mut ElementContext) + 'static>(
     self,
     factory: F,
-  ) -> ParentComponent<Self>;
-  fn with_layout(self, layout_constraints: Vec<ElementConstraints>) -> LayoutedComponent<Self>;
+  ) -> ParentComponent<Self> {
+    ParentComponent {
+      component: self,
+      children: Box::new(factory),
+    }
+  }
+
+  fn with_layout(self, layout_constraints: Vec<ElementConstraints>) -> LayoutedComponent<Self> {
+    LayoutedComponent {
+      layout_constraints,
+      component: self,
+    }
+  }
+
   fn build(self, context: &mut ElementContext) -> Element;
 }
 
-pub trait Component {
-  fn construct(&self, _context: &mut ElementContext) {}
-  fn render(&self, _layout: &ResolvedLayout, _renderer: &mut dyn Renderer, _theme: &mut Theme) {}
+pub trait Component: Debug + Any {
+  fn construct(&mut self, _context: &mut ElementContext) {}
+  fn render(&self, _context: &mut RenderContext) {}
+}
+
+pub struct RenderContext<'a> {
+  pub layout: &'a ResolvedLayout,
+  pub renderer: &'a mut dyn Renderer,
+  pub theme: &'a mut Theme,
+  pub input_state: &'a InputState,
 }
 
 impl<T: ComponentElement> ComponentElement for LayoutedComponent<T> {
@@ -42,22 +65,13 @@ impl<T: ComponentElement> ComponentElement for LayoutedComponent<T> {
     );
     element
   }
+}
 
-  fn with_children<F: FnOnce(&mut ElementContext) + 'static>(
-    self,
-    factory: F,
-  ) -> ParentComponent<Self> {
-    ParentComponent {
-      component: self,
-      children: Box::new(factory),
-    }
-  }
-
-  fn with_layout(self, layout_constraints: Vec<ElementConstraints>) -> LayoutedComponent<Self> {
-    LayoutedComponent {
-      layout_constraints,
-      component: self,
-    }
+impl<T: ComponentElement> std::fmt::Debug for LayoutedComponent<T> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("LayoutedComponent")
+      .field("component", &self.component)
+      .finish()
   }
 }
 
@@ -68,22 +82,13 @@ impl<T: ComponentElement> ComponentElement for ParentComponent<T> {
     (self.children)(&mut child_context);
     element
   }
+}
 
-  fn with_children<F: FnOnce(&mut ElementContext) + 'static>(
-    self,
-    factory: F,
-  ) -> ParentComponent<Self> {
-    ParentComponent {
-      component: self,
-      children: Box::new(factory),
-    }
-  }
-
-  fn with_layout(self, layout_constraints: Vec<ElementConstraints>) -> LayoutedComponent<Self> {
-    LayoutedComponent {
-      layout_constraints,
-      component: self,
-    }
+impl<T: ComponentElement> std::fmt::Debug for ParentComponent<T> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("ParentComponent")
+      .field("component", &self.component)
+      .finish()
   }
 }
 
@@ -93,21 +98,6 @@ impl<T: Component + 'static> ComponentElement for T {
     context.construct_element(&element);
     element
   }
-
-  fn with_children<F: FnOnce(&mut ElementContext) + 'static>(
-    self,
-    factory: F,
-  ) -> ParentComponent<Self> {
-    ParentComponent {
-      children: Box::new(factory),
-      component: self,
-    }
-  }
-
-  fn with_layout(self, layout_constraints: Vec<ElementConstraints>) -> LayoutedComponent<Self> {
-    LayoutedComponent {
-      layout_constraints,
-      component: self,
-    }
-  }
 }
+
+pub type ChildrenProperty = Option<Box<dyn FnOnce(&mut ElementContext)>>;

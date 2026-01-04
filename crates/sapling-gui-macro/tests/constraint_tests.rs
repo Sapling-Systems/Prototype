@@ -264,6 +264,333 @@ fn test_multiple_terms() {
   assert_eq!(self_right_term.coefficient, -1.0);
 }
 
+#[test]
+fn test_mixed_constraint_types() {
+  // Test a constraint with:
+  // 1. Known constraint variables (parent_left, self_left)
+  // 2. Expression variables (element.right())
+  // 3. Constants (10.0, 2.0)
+  //
+  // Test: self_left == element.right() + parent_left * 2.0 + 10.0
+
+  // Create a mock element with id 42
+  let element = Element { id: 42 };
+
+  let spacing = 10.0;
+  let multiplier = 2.0;
+
+  // This should compile and work correctly
+  // Normalized: self_left - element.right() - parent_left * 2.0 - 10.0 == 0
+  let constraint = constraint1!(self_left == element.right() + parent_left * multiplier + spacing);
+
+  // Verify the constraint operator
+  assert!(matches!(
+    constraint.operator,
+    ElementConstraintOperator::Equal
+  ));
+
+  // Verify strength
+  assert_eq!(constraint.strength, ElementConstraints::REQUIRED);
+
+  // Verify constant term: -spacing
+  assert_eq!(constraint.expression.constant, -spacing);
+
+  // Should have 3 terms: self_left, parent_left, and element.right()
+  assert_eq!(constraint.expression.terms.len(), 3);
+
+  // Find and verify each term
+  let self_left_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
+    .expect("Should have self_left term");
+  assert_eq!(self_left_term.coefficient, 1.0);
+
+  let parent_left_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentLeft))
+    .expect("Should have parent_left term");
+  assert_eq!(parent_left_term.coefficient, -multiplier);
+
+  let element_right_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementRight(_)))
+    .expect("Should have element.right() term");
+  assert_eq!(element_right_term.coefficient, -1.0);
+
+  // Verify the element ID in the ElementRight variant
+  if let ElementConstraintVariable::ElementRight(elem) = &element_right_term.variable {
+    assert_eq!(elem.id, 42);
+  } else {
+    panic!("Expected ElementRight variant");
+  }
+}
+
+#[test]
+fn test_complex_mixed_expression() {
+  // Test with multiple runtime variable expressions
+  let element1 = Element { id: 1 };
+  let element2 = Element { id: 2 };
+
+  let padding = 5.0;
+
+  // Test: self_left == element1.right() + element2.left() + parent_top - padding
+  // Normalized: self_left - element1.right() - element2.left() - parent_top + padding == 0
+  let constraint =
+    constraint1!(self_left == element1.right() + element2.left() + parent_top - padding);
+
+  // Verify operator
+  assert!(matches!(
+    constraint.operator,
+    ElementConstraintOperator::Equal
+  ));
+
+  // Verify strength
+  assert_eq!(constraint.strength, ElementConstraints::REQUIRED);
+
+  // Verify constant: +padding
+  assert_eq!(constraint.expression.constant, padding);
+
+  // Should have 4 terms: self_left, element1.right(), element2.left(), parent_top
+  assert_eq!(constraint.expression.terms.len(), 4);
+
+  // Verify self_left
+  let self_left_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
+    .expect("Should have self_left term");
+  assert_eq!(self_left_term.coefficient, 1.0);
+
+  // Verify parent_top
+  let parent_top_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentTop))
+    .expect("Should have parent_top term");
+  assert_eq!(parent_top_term.coefficient, -1.0);
+
+  // Verify element1.right()
+  let element1_right_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementRight(ref e) if e.id == 1))
+    .expect("Should have element1.right() term");
+  assert_eq!(element1_right_term.coefficient, -1.0);
+
+  // Verify element2.left()
+  let element2_left_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementLeft(ref e) if e.id == 2))
+    .expect("Should have element2.left() term");
+  assert_eq!(element2_left_term.coefficient, -1.0);
+}
+
+#[test]
+fn test_runtime_variable_with_coefficient() {
+  // Test runtime variable with a coefficient
+  // Test: self_left == element.right() * 2.0 + 10.0
+  // Normalized: self_left - element.right() * 2.0 - 10.0 == 0
+  let element = Element { id: 99 };
+
+  let constraint = constraint1!(self_left == element.right() * 2.0 + 10.0);
+
+  // Verify operator
+  assert!(matches!(
+    constraint.operator,
+    ElementConstraintOperator::Equal
+  ));
+
+  // Verify strength
+  assert_eq!(constraint.strength, ElementConstraints::REQUIRED);
+
+  // Verify constant: -10.0
+  assert_eq!(constraint.expression.constant, -10.0);
+
+  // Should have 2 terms: self_left and element.right()
+  assert_eq!(constraint.expression.terms.len(), 2);
+
+  // Verify self_left
+  let self_left_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
+    .expect("Should have self_left term");
+  assert_eq!(self_left_term.coefficient, 1.0);
+
+  // Verify element.right() with coefficient -2.0
+  let element_right_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementRight(ref e) if e.id == 99))
+    .expect("Should have element.right() term");
+  assert_eq!(element_right_term.coefficient, -2.0);
+}
+
+#[test]
+fn test_runtime_variable_in_subtraction() {
+  // Test runtime variable in subtraction
+  // Test: self_right == parent_right - element.left() - spacing
+  // Normalized: self_right - parent_right + element.left() + spacing == 0
+  let element = Element { id: 7 };
+
+  let spacing = 8.0;
+
+  let constraint = constraint1!(self_right == parent_right - element.left() - spacing);
+
+  // Verify operator
+  assert!(matches!(
+    constraint.operator,
+    ElementConstraintOperator::Equal
+  ));
+
+  // Verify strength
+  assert_eq!(constraint.strength, ElementConstraints::REQUIRED);
+
+  // Verify constant: +spacing
+  assert_eq!(constraint.expression.constant, spacing);
+
+  // Should have 3 terms: self_right, parent_right, element.left()
+  assert_eq!(constraint.expression.terms.len(), 3);
+
+  // Verify self_right
+  let self_right_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfRight))
+    .expect("Should have self_right term");
+  assert_eq!(self_right_term.coefficient, 1.0);
+
+  // Verify parent_right
+  let parent_right_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentRight))
+    .expect("Should have parent_right term");
+  assert_eq!(parent_right_term.coefficient, -1.0);
+
+  // Verify element.left() with coefficient +1.0 (double negation)
+  let element_left_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementLeft(ref e) if e.id == 7))
+    .expect("Should have element.left() term");
+  assert_eq!(element_left_term.coefficient, 1.0);
+}
+
+#[test]
+fn test_runtime_variable_in_addition() {
+  let element = Element { id: 7 };
+
+  let spacing = 8.0;
+
+  // becomes: self_left - spacing - element.right()
+  let constraint = constraint1!(self_left == element.right() + spacing);
+
+  assert!(matches!(
+    constraint.operator,
+    ElementConstraintOperator::Equal
+  ));
+
+  assert_eq!(constraint.strength, ElementConstraints::REQUIRED);
+  assert_eq!(constraint.expression.constant, -spacing);
+  assert_eq!(constraint.expression.terms.len(), 2);
+
+  assert_eq!(
+    constraint.expression.terms[0].variable,
+    ElementConstraintVariable::SelfLeft
+  );
+  assert_eq!(constraint.expression.terms[0].coefficient, 1.0);
+
+  assert_eq!(
+    constraint.expression.terms[1].variable,
+    ElementConstraintVariable::ElementRight(Element { id: 7 })
+  );
+  assert_eq!(constraint.expression.terms[1].coefficient, -1.0);
+}
+
+#[test]
+fn test_all_three_types_combined() {
+  // Ultimate test: all three types in one constraint
+  // Test: (self_left + self_right) * 0.5 == element.right() + parent_left * scale + offset + 10.0
+  // Normalized: 0.5*self_left + 0.5*self_right - element.right() - parent_left*scale - offset - 10.0 == 0
+
+  let element = Element { id: 123 };
+
+  let offset = 15.0;
+  let scale = 0.5;
+
+  let constraint = constraint1!(
+    (self_left + self_right) * 0.5 == element.right() + parent_left * scale + offset + 10.0
+  );
+
+  // Verify operator
+  assert!(matches!(
+    constraint.operator,
+    ElementConstraintOperator::Equal
+  ));
+
+  // Verify strength
+  assert_eq!(constraint.strength, ElementConstraints::REQUIRED);
+
+  // Verify constant: -offset - 10.0
+  assert_eq!(constraint.expression.constant, -offset - 10.0);
+
+  // Should have 4 terms: self_left, self_right, element.right(), parent_left
+  assert_eq!(constraint.expression.terms.len(), 4);
+
+  // Verify self_left with coefficient 0.5
+  let self_left_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
+    .expect("Should have self_left term");
+  assert_eq!(self_left_term.coefficient, 0.5);
+
+  // Verify self_right with coefficient 0.5
+  let self_right_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfRight))
+    .expect("Should have self_right term");
+  assert_eq!(self_right_term.coefficient, 0.5);
+
+  // Verify parent_left with coefficient -scale
+  let parent_left_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentLeft))
+    .expect("Should have parent_left term");
+  assert_eq!(parent_left_term.coefficient, -scale);
+
+  // Verify element.right() with coefficient -1.0
+  let element_right_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementRight(ref e) if e.id == 123))
+    .expect("Should have element.right() term");
+  assert_eq!(element_right_term.coefficient, -1.0);
+}
+
 // ============================================================================
 // constraint1! macro tests
 // ============================================================================

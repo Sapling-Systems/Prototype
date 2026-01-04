@@ -336,7 +336,9 @@ dependencies = [
  "anyhow",
  "raylib",
  "sapling-app",
+ "sapling-data-model",
  "sapling-gui",
+ "sapling-query-engine",
 ]
 
 [[package]]
@@ -642,6 +644,7 @@ dependencies = [
  "anyhow",
  "kasuari",
  "raylib",
+ "sapling-app",
  "sapling-gui-macro",
 ]
 

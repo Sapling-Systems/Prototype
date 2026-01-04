@@ -39,3 +39,6 @@ darling = "0.23.0"
 thiserror = "2.0.17"
 anyhow = "1.0.100"
 kasuari = "0.4.11"
+
+[profile.dev.package.kasuari]
+opt-level = 3
