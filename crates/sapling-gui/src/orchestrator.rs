@@ -6,6 +6,7 @@ use std::{
 use kasuari::{
   Constraint as KasuariConstraint, Expression, RelationalOperator as KasuariRelationalOperator,
   Solver as KasuariSolver, Strength, Term as KasuariTerm, Variable as KasuariVariable,
+  WeightedRelation::*,
 };
 use sapling_app::App;
 
@@ -16,7 +17,7 @@ use crate::{
     ElementConstraint, ElementConstraintOperator, ElementConstraintVariable, ElementConstraints,
     ResolvedLayout,
   },
-  prelude::{RenderContext, Renderer},
+  prelude::Renderer,
   theme::Theme,
 };
 
@@ -24,7 +25,7 @@ pub struct Orchestrator {
   elements: Vec<AllocatedElement>,
   root_vars: RootVars,
   debug_enabled: bool,
-  debug_tree: Option<DebugAllocatedElement>,
+  debug_tree: Option<Vec<DebugAllocatedElement>>,
   mutable_state: HashMap<ComponentStateKey, Box<dyn Any>>,
 }
 
@@ -81,11 +82,12 @@ impl Orchestrator {
     component.construct(&mut ElementContext {
       parent_element: Some(0),
       elements: &mut self.elements,
+      mutable_state: &mut self.mutable_state,
       root_vars: &self.root_vars,
       debug_enabled: self.debug_enabled,
       render_width: width,
       render_height: height,
-      prev_debug_node: &self.debug_tree,
+      prev_debug_nodes: &self.debug_tree,
       theme,
       app,
     });
@@ -112,12 +114,13 @@ impl Orchestrator {
           app,
           theme,
           parent_element: element.parent_element,
+          mutable_state: &mut self.mutable_state,
           render_height: height,
           render_width: width,
           debug_enabled: self.debug_enabled,
           root_vars: &self.root_vars,
           elements: &mut self.elements,
-          prev_debug_node: &self.debug_tree,
+          prev_debug_nodes: &self.debug_tree,
         };
         element_context.set_element_constraints(
           &Element { id: element_id },
@@ -140,7 +143,7 @@ impl Orchestrator {
     let rendering_start = std::time::Instant::now();
     let layouting_duration = rendering_start - layouting_start;
 
-    for element in self.elements.iter() {
+    for (id, element) in self.elements.iter().enumerate() {
       let bottom = solver.get_value(element.layout_vars.self_bottom);
       let right = solver.get_value(element.layout_vars.self_right);
       let left = solver.get_value(element.layout_vars.self_left);
@@ -157,6 +160,9 @@ impl Orchestrator {
           theme,
           renderer,
           input_state,
+          element_id: id,
+          elements: &self.elements,
+          mutable_state: &mut self.mutable_state,
         });
       } else {
         eprintln!("Allocated element has no component")
@@ -176,8 +182,14 @@ impl Orchestrator {
           element_tree.get_mut(&parent).unwrap().push(id);
         }
       }
-      self.debug_tree =
-        Some(self.create_debug_element(&solver, &element_tree, &self.elements[0], 0));
+
+      let debug_elements = self
+        .elements
+        .iter()
+        .enumerate()
+        .map(|(id, element)| self.create_debug_element(&solver, &element_tree, element, id))
+        .collect::<Vec<_>>();
+      self.debug_tree = Some(debug_elements);
     }
 
     (rendering_duration, layouting_duration)
@@ -219,24 +231,14 @@ impl Orchestrator {
       .unwrap_or_else(|| debug_info.clone());
 
     DebugAllocatedElement {
-      id: element_id,
       key: element.key.clone(),
-      layout_constraints: ElementConstraints {
-        constraints: vec![],
-      },
-      debug_info,
-      component_name,
+      parent_id: element.parent_element,
+      layout_constraints: element.debug_constraints.clone().unwrap(),
+      id: element_id,
       layout,
-      children: children
-        .iter()
-        .flat_map(|child| {
-          let element = &self.elements[*child];
-          if format!("{:?}", element.component).contains("Debugger") {
-            return None;
-          }
-          Some(self.create_debug_element(solver, relationships, element, *child))
-        })
-        .collect(),
+      children: children.clone(),
+      component_name,
+      debug_info,
     }
   }
 }
@@ -264,18 +266,6 @@ impl Element {
   }
 }
 
-pub struct ElementContext<'a> {
-  elements: &'a mut Vec<AllocatedElement>,
-  parent_element: Option<usize>,
-  root_vars: &'a RootVars,
-  render_width: f32,
-  render_height: f32,
-  debug_enabled: bool,
-  pub prev_debug_node: &'a Option<DebugAllocatedElement>,
-  pub theme: &'a mut Theme,
-  pub app: &'a mut App,
-}
-
 struct AllocatedElement {
   parent_element: Option<usize>,
   component: Option<Box<dyn Component>>,
@@ -298,17 +288,39 @@ struct ComponentStateKey {
   key: String,
   parent_key: String,
   type_id: TypeId,
+  name: String,
+}
+
+impl ComponentStateKey {
+  pub fn new<T: Any + Clone + 'static>(
+    elements: &[AllocatedElement],
+    id: usize,
+    name: &str,
+  ) -> Self {
+    let element = &elements[id];
+    let parent_element = element.parent_element.map(|parent_id| &elements[parent_id]);
+
+    ComponentStateKey {
+      key: element.key.clone(),
+      name: name.to_string(),
+      parent_key: parent_element
+        .map(|parent| parent.key.clone())
+        .unwrap_or_default(),
+      type_id: std::any::TypeId::of::<T>(),
+    }
+  }
 }
 
 #[derive(Debug, Clone)]
 pub struct DebugAllocatedElement {
   pub id: usize,
+  pub parent_id: Option<usize>,
   pub key: String,
   pub debug_info: String,
   pub component_name: String,
   pub layout: ResolvedLayout,
   pub layout_constraints: ElementConstraints,
-  pub children: Vec<DebugAllocatedElement>,
+  pub children: Vec<usize>,
 }
 
 struct RootVars {
@@ -316,6 +328,19 @@ struct RootVars {
   render_top: KasuariVariable,
   render_right: KasuariVariable,
   render_bottom: KasuariVariable,
+}
+
+pub struct ElementContext<'a> {
+  elements: &'a mut Vec<AllocatedElement>,
+  parent_element: Option<usize>,
+  root_vars: &'a RootVars,
+  render_width: f32,
+  render_height: f32,
+  debug_enabled: bool,
+  mutable_state: &'a mut HashMap<ComponentStateKey, Box<dyn Any>>,
+  pub prev_debug_nodes: &'a Option<Vec<DebugAllocatedElement>>,
+  pub theme: &'a mut Theme,
+  pub app: &'a mut App,
 }
 
 impl<'a> ElementContext<'a> {
@@ -363,7 +388,8 @@ impl<'a> ElementContext<'a> {
       render_height: self.render_height,
       render_width: self.render_width,
       root_vars: self.root_vars,
-      prev_debug_node: self.prev_debug_node,
+      prev_debug_nodes: self.prev_debug_nodes,
+      mutable_state: self.mutable_state,
       theme: self.theme,
       app: self.app,
     });
@@ -378,10 +404,15 @@ impl<'a> ElementContext<'a> {
       render_width: self.render_width,
       debug_enabled: self.debug_enabled,
       root_vars: self.root_vars,
-      prev_debug_node: self.prev_debug_node,
+      prev_debug_nodes: self.prev_debug_nodes,
+      mutable_state: self.mutable_state,
       theme: self.theme,
       app: self.app,
     }
+  }
+
+  pub fn current_element_id(&self) -> usize {
+    self.parent_element.unwrap_or_default()
   }
 
   pub fn set_element_constraints(
@@ -402,12 +433,25 @@ impl<'a> ElementContext<'a> {
 
     let id = element.id;
     let element = self.elements.get(id).unwrap();
+
     let constraints = constraints
       .into_iter()
       .map(|constraint| self.map_constraint(constraint, element))
       .collect::<Vec<_>>();
 
     let element = self.elements.get_mut(id).unwrap();
+
+    // Insert default system constraints
+    if element.constraints.is_empty() {
+      // Ensure that elements are always positive width & height or 0
+      element.constraints.push(
+        element.layout_vars.self_right | GE(Strength::REQUIRED) | element.layout_vars.self_left,
+      );
+      element.constraints.push(
+        element.layout_vars.self_bottom | GE(Strength::REQUIRED) | element.layout_vars.self_top,
+      );
+    }
+
     element.constraints.extend(constraints);
   }
 
@@ -498,5 +542,73 @@ impl<'a> ElementContext<'a> {
         .or_else(|| parent_element.map(|parent| parent.layout_vars.self_bottom))
         .unwrap_or(self.root_vars.render_bottom),
     }
+  }
+}
+
+pub trait StatefulContext {
+  fn prepare_and_get_state<T: Any + Clone + 'static, FInit: FnOnce() -> T>(
+    &mut self,
+    initializer: FInit,
+    name: &str,
+  ) -> T;
+
+  fn set_state<T: Any + Clone + 'static>(&mut self, element_id: usize, name: &str, value: T);
+}
+
+impl<'a> StatefulContext for ElementContext<'a> {
+  fn prepare_and_get_state<T: Any + Clone + 'static, FInit: FnOnce() -> T>(
+    &mut self,
+    initializer: FInit,
+    name: &str,
+  ) -> T {
+    let state_key = ComponentStateKey::new::<T>(self.elements, self.parent_element.unwrap(), name);
+
+    if !self.mutable_state.contains_key(&state_key) {
+      self
+        .mutable_state
+        .insert(state_key.clone(), Box::new(initializer()));
+    }
+
+    let boxed_state = self.mutable_state.get(&state_key).unwrap();
+    boxed_state.downcast_ref::<T>().unwrap().clone()
+  }
+
+  fn set_state<T: Any + Clone + 'static>(&mut self, element_id: usize, name: &str, value: T) {
+    let state_key = ComponentStateKey::new::<T>(self.elements, element_id, name);
+    self.mutable_state.insert(state_key, Box::new(value));
+  }
+}
+
+pub struct RenderContext<'a> {
+  pub layout: &'a ResolvedLayout,
+  pub renderer: &'a mut dyn Renderer,
+  pub theme: &'a mut Theme,
+  pub input_state: &'a InputState,
+  elements: &'a [AllocatedElement],
+  element_id: usize,
+  mutable_state: &'a mut HashMap<ComponentStateKey, Box<dyn Any>>,
+}
+
+impl<'a> StatefulContext for RenderContext<'a> {
+  fn prepare_and_get_state<T: Any + Clone + 'static, FInit: FnOnce() -> T>(
+    &mut self,
+    initializer: FInit,
+    name: &str,
+  ) -> T {
+    let state_key = ComponentStateKey::new::<T>(self.elements, self.element_id, name);
+
+    if !self.mutable_state.contains_key(&state_key) {
+      self
+        .mutable_state
+        .insert(state_key.clone(), Box::new(initializer()));
+    }
+
+    let boxed_state = self.mutable_state.get(&state_key).unwrap();
+    boxed_state.downcast_ref::<T>().unwrap().clone()
+  }
+
+  fn set_state<T: Any + Clone + 'static>(&mut self, element_id: usize, name: &str, value: T) {
+    let state_key = ComponentStateKey::new::<T>(self.elements, element_id, name);
+    self.mutable_state.insert(state_key, Box::new(value));
   }
 }

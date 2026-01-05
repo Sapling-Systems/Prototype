@@ -1,17 +1,19 @@
+use std::{any::Any, marker::PhantomData};
+
 use raylib::{
   color::Color,
   math::{Rectangle, Vector2, Vector4},
 };
 
 use crate::{
-  component::{Component, RenderContext},
+  component::Component,
   layout::ResolvedLayout,
-  prelude::{RenderFilter, Renderer},
+  prelude::{ElementContext, RenderContext, RenderFilter, Renderer, StatefulContext},
   theme::{FontVariant, Theme},
 };
 
 /// Utility view that serves as a container for other views, does not render anything itself.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LayoutView;
 
 impl Component for LayoutView {}
@@ -30,7 +32,7 @@ impl StyledView {
   }
 
   pub fn with_background_color(mut self, color: Color) -> Self {
-    self.style.background_color = color;
+    self.style.background_color = Some(color);
     self
   }
 
@@ -107,26 +109,28 @@ impl Component for StyledView {
       );
     }
 
-    context.renderer.draw_rectangle(
-      Rectangle {
-        x: context.layout.x + self.style.border_width / 2.0,
-        y: context.layout.y + self.style.border_width / 2.0,
-        height: context.layout.height - self.style.border_width,
-        width: context.layout.width - self.style.border_width,
-      },
-      inner_radii(
-        radii,
-        self.style.border_width,
-        self.style.border_width <= 0.0,
-      ),
-      self.style.background_color,
-    );
+    if let Some(background_color) = self.style.background_color {
+      context.renderer.draw_rectangle(
+        Rectangle {
+          x: context.layout.x + self.style.border_width / 2.0,
+          y: context.layout.y + self.style.border_width / 2.0,
+          height: context.layout.height - self.style.border_width,
+          width: context.layout.width - self.style.border_width,
+        },
+        inner_radii(
+          radii,
+          self.style.border_width,
+          self.style.border_width <= 0.0,
+        ),
+        background_color,
+      );
+    }
   }
 }
 
 #[derive(Debug)]
 pub struct ViewStyle {
-  background_color: Color,
+  background_color: Option<Color>,
   border_radius: (f32, f32, f32, f32),
   border_width: f32,
   border_color: Color,
@@ -143,7 +147,7 @@ pub struct DropShadowStyle {
 impl Default for ViewStyle {
   fn default() -> Self {
     ViewStyle {
-      background_color: Color::WHITE,
+      background_color: None,
       border_radius: (0.0, 0.0, 0.0, 0.0),
       border_width: 0.0,
       border_color: Color::BLACK,
@@ -338,11 +342,11 @@ impl TextFormat {
 }
 
 pub struct Pressable {
-  on_press: Box<dyn Fn() + 'static>,
+  on_press: Box<dyn Fn(&mut RenderContext) + 'static>,
 }
 
 impl Pressable {
-  pub fn new<F: Fn() + 'static>(on_press: F) -> Self {
+  pub fn new<F: Fn(&mut RenderContext) + 'static>(on_press: F) -> Self {
     Self {
       on_press: Box::new(on_press),
     }
@@ -363,8 +367,37 @@ impl Component for Pressable {
         && pressed_location.x < context.layout.x + context.layout.width
         && pressed_location.y < context.layout.y + context.layout.height
       {
-        (*self.on_press)();
+        (*self.on_press)(context);
       }
     }
+  }
+}
+
+#[derive(Clone, Copy)]
+pub struct MutableState<T: Any + Clone + 'static> {
+  name: &'static str,
+  element_id: usize,
+  _p: PhantomData<T>,
+}
+
+impl<T: Any + Clone + 'static> MutableState<T> {
+  pub fn new<FInit: FnOnce() -> T>(
+    context: &mut ElementContext,
+    initializer: FInit,
+    name: &'static str,
+  ) -> (T, Self) {
+    let value = context.prepare_and_get_state(initializer, name);
+    (
+      value,
+      Self {
+        name,
+        element_id: context.current_element_id(),
+        _p: PhantomData,
+      },
+    )
+  }
+
+  pub fn set_direct(&self, context: &mut impl StatefulContext, new_value: T) {
+    context.set_state(self.element_id, self.name, new_value);
   }
 }

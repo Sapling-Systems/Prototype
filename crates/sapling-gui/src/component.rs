@@ -5,7 +5,7 @@ use crate::{
   input::InputState,
   layout::{ElementConstraints, ResolvedLayout},
   orchestrator::{Element, ElementContext},
-  prelude::Renderer,
+  prelude::{RenderContext, Renderer},
   theme::Theme,
 };
 
@@ -43,13 +43,6 @@ pub trait ComponentElement: Sized + Debug + 'static {
 pub trait Component: Debug + Any {
   fn construct(&mut self, _context: &mut ElementContext) {}
   fn render(&self, _context: &mut RenderContext) {}
-}
-
-pub struct RenderContext<'a> {
-  pub layout: &'a ResolvedLayout,
-  pub renderer: &'a mut dyn Renderer,
-  pub theme: &'a mut Theme,
-  pub input_state: &'a InputState,
 }
 
 impl<T: ComponentElement> ComponentElement for LayoutedComponent<T> {

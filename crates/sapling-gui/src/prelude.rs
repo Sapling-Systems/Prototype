@@ -3,7 +3,7 @@ pub use crate::base::{
   TextVerticalAlignment, TextView, ViewStyle,
 };
 pub use crate::component::{
-  ChildrenProperty, Component, ComponentElement, LayoutedComponent, ParentComponent, RenderContext,
+  ChildrenProperty, Component, ComponentElement, LayoutedComponent, ParentComponent,
 };
 pub use crate::input::InputState;
 pub use crate::layout::{
@@ -11,7 +11,9 @@ pub use crate::layout::{
   ElementConstraintTerm, ElementConstraintVariable, ElementConstraints, IntoConstraintTerm,
   ResolvedLayout,
 };
-pub use crate::orchestrator::{Element, ElementContext, Orchestrator};
+pub use crate::orchestrator::{
+  Element, ElementContext, Orchestrator, RenderContext, StatefulContext,
+};
 pub use crate::renderer::{RenderFilter, Renderer};
 pub use crate::theme::{FontVariant, Theme};
 

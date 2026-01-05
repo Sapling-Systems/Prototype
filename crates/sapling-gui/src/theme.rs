@@ -19,11 +19,12 @@ pub struct Theme {
   pub drop_shadow_default: DropShadowStyle,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy)]
 pub enum FontVariant {
   Primary,
   DefaultForeground,
   DefaultForegroundBold,
+  Custom { color: Color, size: f32 },
 }
 
 impl Theme {
@@ -80,6 +81,11 @@ impl Theme {
         font: self.font_primary_bold.as_mut().unwrap(),
         size: 14.0,
         color: self.color_background_contrast,
+      },
+      FontVariant::Custom { color, size } => FontConfig {
+        font: self.font_primary.as_mut().unwrap(),
+        size,
+        color,
       },
     }
   }

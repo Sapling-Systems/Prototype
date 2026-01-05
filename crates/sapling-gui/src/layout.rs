@@ -92,7 +92,7 @@ impl ElementConstraints {
   pub fn relative_position() -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_left == parent_top),
+        constraint1!(self_left == parent_left),
         constraint1!(self_top == parent_top),
       ],
     }
