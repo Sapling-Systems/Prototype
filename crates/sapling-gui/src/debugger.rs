@@ -61,6 +61,7 @@ impl Component for DebuggerView {
           ElementConstraints::fixed_size(300.0, 500.0),
         ])
         .with_children(move |context| {
+          let mut offset = 50.0;
           TextView::new(
             FontVariant::Custom {
               color: Color::WHITE,
@@ -72,7 +73,6 @@ impl Component for DebuggerView {
           .with_layout(vec![ElementConstraints::cover_parent()])
           .build(context);
 
-          let mut offset = 50.0;
           for line in component_debug.lines() {
             TextView::new(
               FontVariant::Custom {
@@ -81,9 +81,10 @@ impl Component for DebuggerView {
               },
               line.to_string(),
             )
-            .with_layout(vec![ElementConstraints::cover_parent_padding(
-              0.0, offset, 0.0, 0.0,
-            )])
+            .with_layout(vec![
+              ElementConstraints::relative_top(offset),
+              ElementConstraints::relative_left(0.0),
+            ])
             .build(context);
             offset += 14.0;
           }
@@ -96,21 +97,22 @@ impl Component for DebuggerView {
             },
             "Layout Constraints".to_string(),
           )
-          .with_layout(vec![ElementConstraints::cover_parent_padding(
-            0.0, offset, 0.0, 0.0,
-          )])
+          .with_layout(vec![
+            ElementConstraints::relative_top(offset),
+            ElementConstraints::relative_left(0.0),
+          ])
           .build(context);
           offset += 18.0;
 
           for constraint in &constraints.constraints {
             ConstraintTextView::new(constraint.clone())
-              .with_layout(vec![ElementConstraints::cover_parent_padding(
-                0.0, offset, 0.0, 0.0,
-              )])
+              .with_layout(vec![
+                ElementConstraints::relative_top(offset),
+                ElementConstraints::relative_left(0.0),
+              ])
               .build(context);
             offset += 16.0;
           }
-
           offset += 12.0;
           TextView::new(
             FontVariant::Custom {
@@ -119,9 +121,10 @@ impl Component for DebuggerView {
             },
             "Resolved Layout".to_string(),
           )
-          .with_layout(vec![ElementConstraints::cover_parent_padding(
-            0.0, offset, 0.0, 0.0,
-          )])
+          .with_layout(vec![
+            ElementConstraints::relative_top(offset),
+            ElementConstraints::relative_left(0.0),
+          ])
           .build(context);
           offset += 18.0;
 
@@ -135,9 +138,10 @@ impl Component for DebuggerView {
               layout.x, layout.y, layout.width, layout.height
             ),
           )
-          .with_layout(vec![ElementConstraints::cover_parent_padding(
-            0.0, offset, 0.0, 0.0,
-          )])
+          .with_layout(vec![
+            ElementConstraints::relative_top(offset),
+            ElementConstraints::relative_left(0.0),
+          ])
           .build(context);
           offset += 18.0;
         })
