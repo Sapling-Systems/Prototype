@@ -18,10 +18,7 @@ impl StructureEditor {
 impl Component for StructureEditor {
   fn construct(&mut self, context: &mut ElementContext) {
     TextView::new(FontVariant::Primary, "Structure Editor".into())
-      .with_layout(vec![
-        ElementConstraints::relative_position(),
-        ElementConstraints::fixed_size(100.0, 100.0),
-      ])
+      .with_layout(vec![ElementConstraints::relative_position()])
       .build(context);
   }
 }

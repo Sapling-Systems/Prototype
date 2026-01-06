@@ -267,13 +267,10 @@ impl Component for HighlightOverlayView {
       },
       format!("${}", self.node.id),
     )
-    .with_layout(vec![
-      ElementConstraints::absolute_position(
-        self.node.layout.x + self.node.layout.width + 2.0,
-        self.node.layout.y - 8.0,
-      ),
-      ElementConstraints::fixed_size(self.node.layout.width, self.node.layout.height),
-    ])
+    .with_layout(vec![ElementConstraints::absolute_position(
+      self.node.layout.x + self.node.layout.width + 2.0,
+      self.node.layout.y - 8.0,
+    )])
     .build(context);
   }
 }

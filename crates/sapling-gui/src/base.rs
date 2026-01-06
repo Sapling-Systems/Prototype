@@ -1,15 +1,16 @@
-use std::{any::Any, marker::PhantomData};
+use std::{any::Any, arch::x86_64::_MM_EXCEPT_INEXACT, marker::PhantomData};
 
+use kasuari::Strength;
 use raylib::{
   color::Color,
   math::{Rectangle, Vector2, Vector4},
 };
+use sapling_gui_macro::constraint1;
 
 use crate::{
   component::Component,
-  layout::ResolvedLayout,
-  prelude::{ElementContext, RenderContext, RenderFilter, Renderer, StatefulContext},
-  theme::{FontVariant, Theme},
+  prelude::{ElementContext, RenderContext, RenderFilter, StatefulContext},
+  theme::FontVariant,
 };
 
 /// Utility view that serves as a container for other views, does not render anything itself.
@@ -173,6 +174,7 @@ pub struct TextView {
   text: String,
   horizontal_alignment: TextHorizontalAlignment,
   vertical_alignment: TextVerticalAlignment,
+  auto_size: bool,
 }
 
 impl TextView {
@@ -182,6 +184,7 @@ impl TextView {
       text,
       horizontal_alignment: TextHorizontalAlignment::Left,
       vertical_alignment: TextVerticalAlignment::Top,
+      auto_size: true,
     }
   }
 
@@ -197,6 +200,32 @@ impl TextView {
 }
 
 impl Component for TextView {
+  fn construct(&mut self, context: &mut ElementContext) {
+    let font_config = context.theme.text_config(self.variant);
+    let expected_size = font_config
+      .font
+      .calculate_text_size(&self.text, font_config.size);
+
+    let grow_width = self.horizontal_alignment == TextHorizontalAlignment::Left && self.auto_size;
+    let grow_height = self.vertical_alignment == TextVerticalAlignment::Top && self.auto_size;
+
+    let mut constraints = vec![];
+    if grow_width {
+      constraints.push(constraint1!(
+        self_width == expected_size.x,
+        strength = Strength::STRONG.value() as f32
+      ));
+    }
+    if grow_height {
+      constraints.push(constraint1!(
+        self_height == expected_size.y,
+        strength = Strength::STRONG.value() as f32
+      ));
+    }
+
+    context.set_parent_element_constraints(constraints);
+  }
+
   fn render(&self, context: &mut RenderContext) {
     let font_config = context.theme.text_config(self.variant);
     let expected_size = font_config
@@ -229,14 +258,14 @@ impl Component for TextView {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TextHorizontalAlignment {
   Left,
   Center,
   Right,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TextVerticalAlignment {
   Top,
   Center,
@@ -246,6 +275,7 @@ pub enum TextVerticalAlignment {
 #[derive(Debug)]
 pub struct FormattedTextView {
   texts: Vec<TextFormat>,
+  auto_size: bool,
   vertical_alignment: TextVerticalAlignment,
   horizontal_alignment: TextHorizontalAlignment,
 }
@@ -256,6 +286,7 @@ impl FormattedTextView {
       texts: Vec::new(),
       vertical_alignment: TextVerticalAlignment::Top,
       horizontal_alignment: TextHorizontalAlignment::Left,
+      auto_size: true,
     }
   }
 
@@ -276,6 +307,46 @@ impl FormattedTextView {
 }
 
 impl Component for FormattedTextView {
+  fn construct(&mut self, context: &mut ElementContext) {
+    let expected_sizes = self
+      .texts
+      .iter()
+      .enumerate()
+      .map(|(index, text)| {
+        let font_config = context.theme.text_config(text.variant);
+        let with_space = index > 0;
+        font_config.font.calculate_text_size(
+          &format!("{}{}", if with_space { " " } else { "" }, text.text),
+          font_config.size,
+        )
+      })
+      .collect::<Vec<_>>();
+
+    let expected_size = expected_sizes
+      .iter()
+      .cloned()
+      .reduce(|a, b| Vector2::new(a.x + b.x, a.y.max(b.y)))
+      .unwrap_or_default();
+
+    let grow_width = self.horizontal_alignment == TextHorizontalAlignment::Left && self.auto_size;
+    let grow_height = self.vertical_alignment == TextVerticalAlignment::Top && self.auto_size;
+
+    let mut constraints = vec![];
+    if grow_width {
+      constraints.push(constraint1!(
+        self_width == expected_size.x,
+        strength = Strength::STRONG.value() as f32
+      ));
+    }
+    if grow_height {
+      constraints.push(constraint1!(
+        self_height == expected_size.y,
+        strength = Strength::STRONG.value() as f32
+      ));
+    }
+    context.set_parent_element_constraints(constraints);
+  }
+
   fn render(&self, context: &mut RenderContext) {
     let expected_sizes = self
       .texts

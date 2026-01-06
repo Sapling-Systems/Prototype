@@ -1,6 +1,7 @@
 use std::{
   any::{Any, TypeId},
   collections::HashMap,
+  time::Duration,
 };
 
 use kasuari::{
@@ -9,13 +10,14 @@ use kasuari::{
   WeightedRelation::*,
 };
 use sapling_app::App;
+use sapling_gui_macro::constraint1;
 
 use crate::{
   component::Component,
   input::InputState,
   layout::{
-    ElementConstraint, ElementConstraintOperator, ElementConstraintVariable, ElementConstraints,
-    ResolvedLayout,
+    ElementConstraint, ElementConstraintExpression, ElementConstraintOperator,
+    ElementConstraintVariable, ElementConstraints, ResolvedLayout,
   },
   prelude::Renderer,
   theme::Theme,
@@ -54,8 +56,8 @@ impl Orchestrator {
     theme: &mut Theme,
     app: &mut App,
     input_state: &InputState,
-  ) -> (std::time::Duration, std::time::Duration) {
-    let layouting_start = std::time::Instant::now();
+  ) -> OrchestratorStats {
+    let construction_start = std::time::Instant::now();
     self.elements.clear();
 
     use kasuari::Strength;
@@ -74,6 +76,8 @@ impl Orchestrator {
         self_y: self.root_vars.render_y,
         self_width: self.root_vars.render_width,
         self_height: self.root_vars.render_height,
+        has_height_constraints: true,
+        has_width_constraints: true,
       },
     });
     let element = self.elements.last_mut().unwrap();
@@ -95,6 +99,8 @@ impl Orchestrator {
     let element = &mut self.elements[0];
     element.component = Some(component);
 
+    let construction_end = std::time::Instant::now();
+    let layouting_start = std::time::Instant::now();
     let mut solver = KasuariSolver::new();
     let const_constraints = solver.add_constraints([
       self.root_vars.render_x | EQ(Strength::REQUIRED) | 0.0,
@@ -106,27 +112,66 @@ impl Orchestrator {
       eprintln!("Solver error on root constraints: {}", err);
     }
 
-    // Set parent coverage layout for elements without any constraints
-    for element_id in 0..self.elements.len() {
-      let element = &self.elements[element_id];
-      if element.constraints.is_empty() {
-        let mut element_context = ElementContext {
-          app,
-          theme,
-          parent_element: element.parent_element,
-          mutable_state: &mut self.mutable_state,
-          render_height: height,
-          render_width: width,
-          debug_enabled: self.debug_enabled,
-          root_vars: &self.root_vars,
-          elements: &mut self.elements,
-          prev_debug_nodes: &self.debug_tree,
-        };
-        element_context.set_element_constraints(
-          &Element { id: element_id },
-          ElementConstraints::cover_parent().constraints,
-        );
+    // Create tree info
+    let mut parent_children_relationship: HashMap<usize, Vec<usize>> = HashMap::new();
+    for (index, _) in self.elements.iter().enumerate() {
+      parent_children_relationship.insert(index, Vec::new());
+    }
+    for (id, element) in self.elements.iter().enumerate() {
+      if let Some(parent) = element.parent_element {
+        parent_children_relationship
+          .get_mut(&parent)
+          .unwrap()
+          .push(id);
       }
+    }
+
+    // Set parent coverage layout as a weak constraint for defaulting
+    for element_id in 0..self.elements.len() {
+      let mut additional_constraints = vec![];
+      additional_constraints.extend(ElementConstraints::relative_position().weak().constraints);
+
+      let element = &self.elements[element_id];
+      let (has_width_constraint, has_height_constraint) = (
+        element.layout_vars.has_width_constraints,
+        element.layout_vars.has_height_constraints,
+      );
+
+      // Automatically grow parent to be children's size if not further restrictred
+      if !has_width_constraint {
+        for child_id in parent_children_relationship.get(&element_id).unwrap() {
+          let child_x = ElementConstraintVariable::ElementX(Element { id: *child_id });
+          let child_width = ElementConstraintVariable::ElementWidth(Element { id: *child_id });
+          additional_constraints.push(constraint1!(
+            self_x + self_width >= child_x + child_width,
+            strength = Strength::STRONG.value() as f32
+          ));
+        }
+      }
+      if !has_height_constraint {
+        for child_id in parent_children_relationship.get(&element_id).unwrap() {
+          let child_y = ElementConstraintVariable::ElementY(Element { id: *child_id });
+          let child_height = ElementConstraintVariable::ElementHeight(Element { id: *child_id });
+          additional_constraints.push(constraint1!(
+            self_y + self_height >= child_y + child_height,
+            strength = Strength::STRONG.value() as f32
+          ));
+        }
+      }
+
+      let mut element_context = ElementContext {
+        app,
+        theme,
+        parent_element: element.parent_element,
+        mutable_state: &mut self.mutable_state,
+        render_height: height,
+        render_width: width,
+        debug_enabled: self.debug_enabled,
+        root_vars: &self.root_vars,
+        elements: &mut self.elements,
+        prev_debug_nodes: &self.debug_tree,
+      };
+      element_context.set_element_constraints(&Element { id: element_id }, additional_constraints);
     }
 
     let element_constraints = self
@@ -140,14 +185,16 @@ impl Orchestrator {
       eprintln!("Solver error on element constraints: {:?}", err);
     }
 
+    let layouting_end = std::time::Instant::now();
     let rendering_start = std::time::Instant::now();
-    let layouting_duration = rendering_start - layouting_start;
 
+    let mut total_constraints = 0;
     for (id, element) in self.elements.iter().enumerate() {
       let x = solver.get_value(element.layout_vars.self_x);
       let y = solver.get_value(element.layout_vars.self_y);
       let width = solver.get_value(element.layout_vars.self_width);
       let height = solver.get_value(element.layout_vars.self_height);
+      total_constraints += element.constraints.len();
 
       if let Some(component) = &element.component {
         component.render(&mut RenderContext {
@@ -169,30 +216,27 @@ impl Orchestrator {
       }
     }
 
-    let rendering_duration = std::time::Instant::now() - rendering_start;
+    let rendering_end = std::time::Instant::now();
 
     if self.debug_enabled {
-      // Build relationship tree
-      let mut element_tree: HashMap<usize, Vec<usize>> = HashMap::new();
-      for (index, _) in self.elements.iter().enumerate() {
-        element_tree.insert(index, Vec::new());
-      }
-      for (id, element) in self.elements.iter().enumerate() {
-        if let Some(parent) = element.parent_element {
-          element_tree.get_mut(&parent).unwrap().push(id);
-        }
-      }
-
       let debug_elements = self
         .elements
         .iter()
         .enumerate()
-        .map(|(id, element)| self.create_debug_element(&solver, &element_tree, element, id))
+        .map(|(id, element)| {
+          self.create_debug_element(&solver, &parent_children_relationship, element, id)
+        })
         .collect::<Vec<_>>();
       self.debug_tree = Some(debug_elements);
     }
 
-    (rendering_duration, layouting_duration)
+    OrchestratorStats {
+      constrain_count: total_constraints,
+      element_count: self.elements.len(),
+      construction_duration: construction_end - construction_start,
+      layout_duration: layouting_end - layouting_start,
+      render_duration: rendering_end - rendering_start,
+    }
   }
 
   fn create_debug_element(
@@ -281,6 +325,8 @@ struct AllocatedElementLayoutVars {
   self_y: KasuariVariable,
   self_width: KasuariVariable,
   self_height: KasuariVariable,
+  has_width_constraints: bool,
+  has_height_constraints: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -374,6 +420,8 @@ impl<'a> ElementContext<'a> {
         self_y: KasuariVariable::new(),
         self_width: KasuariVariable::new(),
         self_height: KasuariVariable::new(),
+        has_height_constraints: false,
+        has_width_constraints: false,
       },
     });
     Element { id }
@@ -415,6 +463,12 @@ impl<'a> ElementContext<'a> {
     self.parent_element.unwrap_or_default()
   }
 
+  pub fn set_parent_element_constraints(&mut self, constraints: Vec<ElementConstraint>) {
+    if let Some(parent_id) = self.parent_element {
+      self.set_element_constraints(&Element { id: parent_id }, constraints);
+    }
+  }
+
   pub fn set_element_constraints(
     &mut self,
     element: &Element,
@@ -430,6 +484,21 @@ impl<'a> ElementContext<'a> {
       let debug_constraints = element.debug_constraints.as_mut().unwrap();
       debug_constraints.constraints.extend(constraints.clone());
     }
+
+    let (has_width_constraints, has_height_constraints) = {
+      constraints
+        .iter()
+        .fold((false, false), |(has_width, has_height), constraint| {
+          constraint.expression.terms.iter().fold(
+            (has_width, has_height),
+            |(has_width, has_height), term| match term.variable {
+              ElementConstraintVariable::SelfWidth => (true, has_height),
+              ElementConstraintVariable::SelfHeight => (has_width, true),
+              _ => (has_width, has_height),
+            },
+          )
+        })
+    };
 
     let id = element.id;
     let element = self.elements.get(id).unwrap();
@@ -453,6 +522,12 @@ impl<'a> ElementContext<'a> {
     }
 
     element.constraints.extend(constraints);
+    if has_height_constraints {
+      element.layout_vars.has_height_constraints = true;
+    }
+    if has_width_constraints {
+      element.layout_vars.has_width_constraints = true;
+    }
   }
 
   fn map_constraint(
@@ -611,4 +686,12 @@ impl<'a> StatefulContext for RenderContext<'a> {
     let state_key = ComponentStateKey::new::<T>(self.elements, element_id, name);
     self.mutable_state.insert(state_key, Box::new(value));
   }
+}
+
+pub struct OrchestratorStats {
+  pub construction_duration: Duration,
+  pub layout_duration: Duration,
+  pub render_duration: Duration,
+  pub element_count: usize,
+  pub constrain_count: usize,
 }

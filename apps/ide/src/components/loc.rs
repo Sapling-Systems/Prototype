@@ -54,7 +54,7 @@ impl Component for LinesOfCodeView {
         .with_layout(vec![
           ElementConstraints::relative_left(0.0),
           ElementConstraints::relative_top(y),
-          ElementConstraints::fixed_size(total_width, text_size.y),
+          ElementConstraints::fixed_width(total_width),
         ])
         .build(context);
 

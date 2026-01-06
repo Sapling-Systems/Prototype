@@ -128,6 +128,18 @@ impl ElementConstraints {
     }
   }
 
+  pub fn fixed_width(width: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_width == width)],
+    }
+  }
+
+  pub fn fixed_height(height: f32) -> Self {
+    ElementConstraints {
+      constraints: vec![constraint1!(self_height == height)],
+    }
+  }
+
   pub fn cover_parent() -> Self {
     ElementConstraints {
       constraints: vec![

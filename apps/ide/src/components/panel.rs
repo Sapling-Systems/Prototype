@@ -37,12 +37,10 @@ impl Component for PanelView {
         FontVariant::DefaultForegroundBold,
         "Structural Editor".into(),
       )
-      .with_layout(vec![ElementConstraints::cover_parent_padding(
-        context.theme.spacing_large,
-        context.theme.spacing_default + 2.0,
-        0.0,
-        0.0,
-      )])
+      .with_layout(vec![
+        ElementConstraints::relative_left(context.theme.spacing_large),
+        ElementConstraints::relative_top(context.theme.spacing_default + 2.0),
+      ])
       .build(context);
 
     let content_children = self.content.take().unwrap();
