@@ -3,9 +3,9 @@ use sapling_gui_macro::{constraint, constraint1};
 
 #[test]
 fn test_simple_equality() {
-  // Test: parent_left == self_left
-  // Expected: parent_left - self_left == 0
-  let result = constraint!(parent_left == self_left);
+  // Test: parent_x == self_x
+  // Expected: parent_x - self_x == 0
+  let result = constraint!(parent_x == self_x);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -18,22 +18,22 @@ fn test_simple_equality() {
   // Check terms
   assert!(matches!(
     c.expression.terms[0].variable,
-    ElementConstraintVariable::ParentLeft
+    ElementConstraintVariable::ParentX
   ));
   assert_eq!(c.expression.terms[0].coefficient, 1.0);
 
   assert!(matches!(
     c.expression.terms[1].variable,
-    ElementConstraintVariable::SelfLeft
+    ElementConstraintVariable::SelfX
   ));
   assert_eq!(c.expression.terms[1].coefficient, -1.0);
 }
 
 #[test]
 fn test_inequality_with_constant() {
-  // Test: self_right >= parent_right - 10.0
-  // Expected: self_right - parent_right + 10.0 >= 0
-  let result = constraint!(self_right >= parent_right - 10.0);
+  // Test: self_width >= parent_width - 10.0
+  // Expected: self_width - parent_width + 10.0 >= 0
+  let result = constraint!(self_width >= parent_width - 10.0);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -47,22 +47,22 @@ fn test_inequality_with_constant() {
 
   assert!(matches!(
     c.expression.terms[0].variable,
-    ElementConstraintVariable::SelfRight
+    ElementConstraintVariable::SelfWidth
   ));
   assert_eq!(c.expression.terms[0].coefficient, 1.0);
 
   assert!(matches!(
     c.expression.terms[1].variable,
-    ElementConstraintVariable::ParentRight
+    ElementConstraintVariable::ParentWidth
   ));
   assert_eq!(c.expression.terms[1].coefficient, -1.0);
 }
 
 #[test]
 fn test_less_or_equal() {
-  // Test: self_top + 5.0 <= parent_bottom
-  // Expected: self_top - parent_bottom + 5.0 <= 0
-  let result = constraint!(self_top + 5.0 <= parent_bottom);
+  // Test: self_y + 5.0 <= parent_height
+  // Expected: self_y - parent_height + 5.0 <= 0
+  let result = constraint!(self_y + 5.0 <= parent_height);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -73,22 +73,22 @@ fn test_less_or_equal() {
 
   assert!(matches!(
     c.expression.terms[0].variable,
-    ElementConstraintVariable::SelfTop
+    ElementConstraintVariable::SelfY
   ));
   assert_eq!(c.expression.terms[0].coefficient, 1.0);
 
   assert!(matches!(
     c.expression.terms[1].variable,
-    ElementConstraintVariable::ParentBottom
+    ElementConstraintVariable::ParentHeight
   ));
   assert_eq!(c.expression.terms[1].coefficient, -1.0);
 }
 
 #[test]
 fn test_multiplication_by_constant() {
-  // Test: self_left * 2.0 == parent_left
-  // Expected: 2.0 * self_left - parent_left == 0
-  let result = constraint!(self_left * 2.0 == parent_left);
+  // Test: self_x * 2.0 == parent_x
+  // Expected: 2.0 * self_x - parent_x == 0
+  let result = constraint!(self_x * 2.0 == parent_x);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -99,22 +99,22 @@ fn test_multiplication_by_constant() {
 
   assert!(matches!(
     c.expression.terms[0].variable,
-    ElementConstraintVariable::SelfLeft
+    ElementConstraintVariable::SelfX
   ));
   assert_eq!(c.expression.terms[0].coefficient, 2.0);
 
   assert!(matches!(
     c.expression.terms[1].variable,
-    ElementConstraintVariable::ParentLeft
+    ElementConstraintVariable::ParentX
   ));
   assert_eq!(c.expression.terms[1].coefficient, -1.0);
 }
 
 #[test]
 fn test_constant_multiplication_left_side() {
-  // Test: 3.0 * parent_top == self_top
-  // Expected: 3.0 * parent_top - self_top == 0
-  let result = constraint!(3.0 * parent_top == self_top);
+  // Test: 3.0 * parent_y == self_y
+  // Expected: 3.0 * parent_y - self_y == 0
+  let result = constraint!(3.0 * parent_y == self_y);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -124,22 +124,22 @@ fn test_constant_multiplication_left_side() {
 
   assert!(matches!(
     c.expression.terms[0].variable,
-    ElementConstraintVariable::ParentTop
+    ElementConstraintVariable::ParentY
   ));
   assert_eq!(c.expression.terms[0].coefficient, 3.0);
 
   assert!(matches!(
     c.expression.terms[1].variable,
-    ElementConstraintVariable::SelfTop
+    ElementConstraintVariable::SelfY
   ));
   assert_eq!(c.expression.terms[1].coefficient, -1.0);
 }
 
 #[test]
 fn test_division_by_constant() {
-  // Test: self_right / 2.0 == parent_right
-  // Expected: 0.5 * self_right - parent_right == 0
-  let result = constraint!(self_right / 2.0 == parent_right);
+  // Test: self_width / 2.0 == parent_width
+  // Expected: 0.5 * self_width - parent_width == 0
+  let result = constraint!(self_width / 2.0 == parent_width);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -149,22 +149,22 @@ fn test_division_by_constant() {
 
   assert!(matches!(
     c.expression.terms[0].variable,
-    ElementConstraintVariable::SelfRight
+    ElementConstraintVariable::SelfWidth
   ));
   assert_eq!(c.expression.terms[0].coefficient, 0.5);
 
   assert!(matches!(
     c.expression.terms[1].variable,
-    ElementConstraintVariable::ParentRight
+    ElementConstraintVariable::ParentWidth
   ));
   assert_eq!(c.expression.terms[1].coefficient, -1.0);
 }
 
 #[test]
 fn test_complex_expression_with_parentheses() {
-  // Test: (self_left + self_right) * 0.5 == parent_left
-  // Expected: 0.5 * self_left + 0.5 * self_right - parent_left == 0
-  let result = constraint!((self_left + self_right) * 0.5 == parent_left);
+  // Test: (self_x + self_width) * 0.5 == parent_x
+  // Expected: 0.5 * self_x + 0.5 * self_width - parent_x == 0
+  let result = constraint!((self_x + self_width) * 0.5 == parent_x);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -173,36 +173,36 @@ fn test_complex_expression_with_parentheses() {
   assert_eq!(c.expression.terms.len(), 3);
 
   // Find terms by variable type
-  let self_left_term = c
+  let self_x_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfX))
     .unwrap();
-  assert_eq!(self_left_term.coefficient, 0.5);
+  assert_eq!(self_x_term.coefficient, 0.5);
 
-  let self_right_term = c
+  let self_width_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfRight))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfWidth))
     .unwrap();
-  assert_eq!(self_right_term.coefficient, 0.5);
+  assert_eq!(self_width_term.coefficient, 0.5);
 
-  let parent_left_term = c
+  let parent_x_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentLeft))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentX))
     .unwrap();
-  assert_eq!(parent_left_term.coefficient, -1.0);
+  assert_eq!(parent_x_term.coefficient, -1.0);
 }
 
 #[test]
 fn test_negation() {
-  // Test: -self_bottom == parent_bottom
-  // Expected: -self_bottom - parent_bottom == 0
-  let result = constraint!(-self_bottom == parent_bottom);
+  // Test: -self_height == parent_height
+  // Expected: -self_height - parent_height == 0
+  let result = constraint!(-self_height == parent_height);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -212,22 +212,22 @@ fn test_negation() {
 
   assert!(matches!(
     c.expression.terms[0].variable,
-    ElementConstraintVariable::SelfBottom
+    ElementConstraintVariable::SelfHeight
   ));
   assert_eq!(c.expression.terms[0].coefficient, -1.0);
 
   assert!(matches!(
     c.expression.terms[1].variable,
-    ElementConstraintVariable::ParentBottom
+    ElementConstraintVariable::ParentHeight
   ));
   assert_eq!(c.expression.terms[1].coefficient, -1.0);
 }
 
 #[test]
 fn test_multiple_terms() {
-  // Test: self_left + parent_left >= self_right - 10.0
-  // Expected: self_left + parent_left - self_right + 10.0 >= 0
-  let result = constraint!(self_left + parent_left >= self_right - 10.0);
+  // Test: self_x + parent_x >= self_width - 10.0
+  // Expected: self_x + parent_x - self_width + 10.0 >= 0
+  let result = constraint!(self_x + parent_x >= self_width - 10.0);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -239,39 +239,39 @@ fn test_multiple_terms() {
   assert_eq!(c.expression.constant, 10.0);
   assert_eq!(c.expression.terms.len(), 3);
 
-  let self_left_term = c
+  let self_x_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfX))
     .unwrap();
-  assert_eq!(self_left_term.coefficient, 1.0);
+  assert_eq!(self_x_term.coefficient, 1.0);
 
-  let parent_left_term = c
+  let parent_x_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentLeft))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentX))
     .unwrap();
-  assert_eq!(parent_left_term.coefficient, 1.0);
+  assert_eq!(parent_x_term.coefficient, 1.0);
 
-  let self_right_term = c
+  let self_width_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfRight))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfWidth))
     .unwrap();
-  assert_eq!(self_right_term.coefficient, -1.0);
+  assert_eq!(self_width_term.coefficient, -1.0);
 }
 
 #[test]
 fn test_mixed_constraint_types() {
   // Test a constraint with:
-  // 1. Known constraint variables (parent_left, self_left)
-  // 2. Expression variables (element.right())
+  // 1. Known constraint variables (parent_x, self_x)
+  // 2. Expression variables (element.x())
   // 3. Constants (10.0, 2.0)
   //
-  // Test: self_left == element.right() + parent_left * 2.0 + 10.0
+  // Test: self_x == element.x() + element.width() + parent_x * 2.0 + 10.0
 
   // Create a mock element with id 42
   let element = Element { id: 42 };
@@ -280,8 +280,9 @@ fn test_mixed_constraint_types() {
   let multiplier = 2.0;
 
   // This should compile and work correctly
-  // Normalized: self_left - element.right() - parent_left * 2.0 - 10.0 == 0
-  let constraint = constraint1!(self_left == element.right() + parent_left * multiplier + spacing);
+  // Normalized: self_x - element.x() - element.width() - parent_x * 2.0 - 10.0 == 0
+  let constraint =
+    constraint1!(self_x == element.x() + element.width() + parent_x * multiplier + spacing);
 
   // Verify the constraint operator
   assert!(matches!(
@@ -295,39 +296,47 @@ fn test_mixed_constraint_types() {
   // Verify constant term: -spacing
   assert_eq!(constraint.expression.constant, -spacing);
 
-  // Should have 3 terms: self_left, parent_left, and element.right()
-  assert_eq!(constraint.expression.terms.len(), 3);
+  // Should have 4 terms: self_x, parent_x, element.x(), and element.width()
+  assert_eq!(constraint.expression.terms.len(), 4);
 
   // Find and verify each term
-  let self_left_term = constraint
+  let self_x_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
-    .expect("Should have self_left term");
-  assert_eq!(self_left_term.coefficient, 1.0);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfX))
+    .expect("Should have self_x term");
+  assert_eq!(self_x_term.coefficient, 1.0);
 
-  let parent_left_term = constraint
+  let parent_x_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentLeft))
-    .expect("Should have parent_left term");
-  assert_eq!(parent_left_term.coefficient, -multiplier);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentX))
+    .expect("Should have parent_x term");
+  assert_eq!(parent_x_term.coefficient, -multiplier);
 
-  let element_right_term = constraint
+  let element_x_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementRight(_)))
-    .expect("Should have element.right() term");
-  assert_eq!(element_right_term.coefficient, -1.0);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementX(_)))
+    .expect("Should have element.x() term");
+  assert_eq!(element_x_term.coefficient, -1.0);
 
-  // Verify the element ID in the ElementRight variant
-  if let ElementConstraintVariable::ElementRight(elem) = &element_right_term.variable {
+  let element_width_term = constraint
+    .expression
+    .terms
+    .iter()
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementWidth(_)))
+    .expect("Should have element.width() term");
+  assert_eq!(element_width_term.coefficient, -1.0);
+
+  // Verify the element ID in the ElementX variant
+  if let ElementConstraintVariable::ElementX(elem) = &element_x_term.variable {
     assert_eq!(elem.id, 42);
   } else {
-    panic!("Expected ElementRight variant");
+    panic!("Expected ElementX variant");
   }
 }
 
@@ -339,10 +348,10 @@ fn test_complex_mixed_expression() {
 
   let padding = 5.0;
 
-  // Test: self_left == element1.right() + element2.left() + parent_top - padding
-  // Normalized: self_left - element1.right() - element2.left() - parent_top + padding == 0
+  // Test: self_x == element1.x() + element1.width() + element2.x() + parent_y - padding
+  // Normalized: self_x - element1.x() - element1.width() - element2.x() - parent_y + padding == 0
   let constraint =
-    constraint1!(self_left == element1.right() + element2.left() + parent_top - padding);
+    constraint1!(self_x == element1.x() + element1.width() + element2.x() + parent_y - padding);
 
   // Verify operator
   assert!(matches!(
@@ -356,54 +365,63 @@ fn test_complex_mixed_expression() {
   // Verify constant: +padding
   assert_eq!(constraint.expression.constant, padding);
 
-  // Should have 4 terms: self_left, element1.right(), element2.left(), parent_top
-  assert_eq!(constraint.expression.terms.len(), 4);
+  // Should have 5 terms: self_x, element1.x(), element1.width(), element2.x(), parent_y
+  assert_eq!(constraint.expression.terms.len(), 5);
 
-  // Verify self_left
-  let self_left_term = constraint
+  // Verify self_x
+  let self_x_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
-    .expect("Should have self_left term");
-  assert_eq!(self_left_term.coefficient, 1.0);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfX))
+    .expect("Should have self_x term");
+  assert_eq!(self_x_term.coefficient, 1.0);
 
-  // Verify parent_top
-  let parent_top_term = constraint
+  // Verify parent_y
+  let parent_y_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentTop))
-    .expect("Should have parent_top term");
-  assert_eq!(parent_top_term.coefficient, -1.0);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentY))
+    .expect("Should have parent_y term");
+  assert_eq!(parent_y_term.coefficient, -1.0);
 
-  // Verify element1.right()
-  let element1_right_term = constraint
+  // Verify element1.x()
+  let element1_x_count = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementRight(ref e) if e.id == 1))
-    .expect("Should have element1.right() term");
-  assert_eq!(element1_right_term.coefficient, -1.0);
+    .filter(|t| matches!(t.variable, ElementConstraintVariable::ElementX(ref e) if e.id == 1))
+    .count();
+  assert_eq!(element1_x_count, 1);
 
-  // Verify element2.left()
-  let element2_left_term = constraint
+  // Verify element1.width()
+  let element1_width_count = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementLeft(ref e) if e.id == 2))
-    .expect("Should have element2.left() term");
-  assert_eq!(element2_left_term.coefficient, -1.0);
+    .filter(|t| matches!(t.variable, ElementConstraintVariable::ElementWidth(ref e) if e.id == 1))
+    .count();
+  assert_eq!(element1_width_count, 1);
+
+  // Verify element2.x()
+  let element2_x_count = constraint
+    .expression
+    .terms
+    .iter()
+    .filter(|t| matches!(t.variable, ElementConstraintVariable::ElementX(ref e) if e.id == 2))
+    .count();
+  assert_eq!(element2_x_count, 1);
 }
 
 #[test]
 fn test_runtime_variable_with_coefficient() {
   // Test runtime variable with a coefficient
-  // Test: self_left == element.right() * 2.0 + 10.0
-  // Normalized: self_left - element.right() * 2.0 - 10.0 == 0
+  // Test: self_x == element.x() * 2.0 + 10.0
+  // Normalized: self_x - element.x() * 2.0 - 10.0 == 0
   let element = Element { id: 99 };
 
-  let constraint = constraint1!(self_left == element.right() * 2.0 + 10.0);
+  let constraint = constraint1!(self_x == element.x() * 2.0 + 10.0);
 
   // Verify operator
   assert!(matches!(
@@ -417,38 +435,38 @@ fn test_runtime_variable_with_coefficient() {
   // Verify constant: -10.0
   assert_eq!(constraint.expression.constant, -10.0);
 
-  // Should have 2 terms: self_left and element.right()
+  // Should have 2 terms: self_x and element.x()
   assert_eq!(constraint.expression.terms.len(), 2);
 
-  // Verify self_left
-  let self_left_term = constraint
+  // Verify self_x
+  let self_x_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
-    .expect("Should have self_left term");
-  assert_eq!(self_left_term.coefficient, 1.0);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfX))
+    .expect("Should have self_x term");
+  assert_eq!(self_x_term.coefficient, 1.0);
 
-  // Verify element.right() with coefficient -2.0
+  // Verify element.x() with coefficient -2.0
   let element_right_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementRight(ref e) if e.id == 99))
-    .expect("Should have element.right() term");
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementX(ref e) if e.id == 99))
+    .expect("Should have element.x() term");
   assert_eq!(element_right_term.coefficient, -2.0);
 }
 
 #[test]
 fn test_runtime_variable_in_subtraction() {
   // Test runtime variable in subtraction
-  // Test: self_right == parent_right - element.left() - spacing
-  // Normalized: self_right - parent_right + element.left() + spacing == 0
+  // Test: self_width == parent_width - element.x() - spacing
+  // Normalized: self_width - parent_width + element.x() + spacing == 0
   let element = Element { id: 7 };
 
   let spacing = 8.0;
 
-  let constraint = constraint1!(self_right == parent_right - element.left() - spacing);
+  let constraint = constraint1!(self_width == parent_width - element.x() - spacing);
 
   // Verify operator
   assert!(matches!(
@@ -462,34 +480,34 @@ fn test_runtime_variable_in_subtraction() {
   // Verify constant: +spacing
   assert_eq!(constraint.expression.constant, spacing);
 
-  // Should have 3 terms: self_right, parent_right, element.left()
+  // Should have 3 terms: self_width, parent_width, element.x()
   assert_eq!(constraint.expression.terms.len(), 3);
 
-  // Verify self_right
-  let self_right_term = constraint
+  // Verify self_width
+  let self_width_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfRight))
-    .expect("Should have self_right term");
-  assert_eq!(self_right_term.coefficient, 1.0);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfWidth))
+    .expect("Should have self_width term");
+  assert_eq!(self_width_term.coefficient, 1.0);
 
-  // Verify parent_right
-  let parent_right_term = constraint
+  // Verify parent_width
+  let parent_width_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentRight))
-    .expect("Should have parent_right term");
-  assert_eq!(parent_right_term.coefficient, -1.0);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentWidth))
+    .expect("Should have parent_width term");
+  assert_eq!(parent_width_term.coefficient, -1.0);
 
-  // Verify element.left() with coefficient +1.0 (double negation)
+  // Verify element.x() with coefficient +1.0 (double negation)
   let element_left_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementLeft(ref e) if e.id == 7))
-    .expect("Should have element.left() term");
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementX(ref e) if e.id == 7))
+    .expect("Should have element.x() term");
   assert_eq!(element_left_term.coefficient, 1.0);
 }
 
@@ -499,8 +517,8 @@ fn test_runtime_variable_in_addition() {
 
   let spacing = 8.0;
 
-  // becomes: self_left - spacing - element.right()
-  let constraint = constraint1!(self_left == element.right() + spacing);
+  // becomes: self_x - spacing - element.x()
+  let constraint = constraint1!(self_x == element.x() + spacing);
 
   assert!(matches!(
     constraint.operator,
@@ -513,13 +531,13 @@ fn test_runtime_variable_in_addition() {
 
   assert_eq!(
     constraint.expression.terms[0].variable,
-    ElementConstraintVariable::SelfLeft
+    ElementConstraintVariable::SelfX
   );
   assert_eq!(constraint.expression.terms[0].coefficient, 1.0);
 
   assert_eq!(
     constraint.expression.terms[1].variable,
-    ElementConstraintVariable::ElementRight(Element { id: 7 })
+    ElementConstraintVariable::ElementX(Element { id: 7 })
   );
   assert_eq!(constraint.expression.terms[1].coefficient, -1.0);
 }
@@ -527,17 +545,16 @@ fn test_runtime_variable_in_addition() {
 #[test]
 fn test_all_three_types_combined() {
   // Ultimate test: all three types in one constraint
-  // Test: (self_left + self_right) * 0.5 == element.right() + parent_left * scale + offset + 10.0
-  // Normalized: 0.5*self_left + 0.5*self_right - element.right() - parent_left*scale - offset - 10.0 == 0
+  // Test: (self_x + self_width) * 0.5 == element.x() + parent_x * scale + offset + 10.0
+  // Normalized: 0.5*self_x + 0.5*self_width - element.x() - parent_x*scale - offset - 10.0 == 0
 
   let element = Element { id: 123 };
 
   let offset = 15.0;
   let scale = 0.5;
 
-  let constraint = constraint1!(
-    (self_left + self_right) * 0.5 == element.right() + parent_left * scale + offset + 10.0
-  );
+  let constraint =
+    constraint1!((self_x + self_width) * 0.5 == element.x() + parent_x * scale + offset + 10.0);
 
   // Verify operator
   assert!(matches!(
@@ -551,43 +568,43 @@ fn test_all_three_types_combined() {
   // Verify constant: -offset - 10.0
   assert_eq!(constraint.expression.constant, -offset - 10.0);
 
-  // Should have 4 terms: self_left, self_right, element.right(), parent_left
+  // Should have 4 terms: self_x, self_width, element.x(), parent_x
   assert_eq!(constraint.expression.terms.len(), 4);
 
-  // Verify self_left with coefficient 0.5
-  let self_left_term = constraint
+  // Verify self_x with coefficient 0.5
+  let self_x_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
-    .expect("Should have self_left term");
-  assert_eq!(self_left_term.coefficient, 0.5);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfX))
+    .expect("Should have self_x term");
+  assert_eq!(self_x_term.coefficient, 0.5);
 
-  // Verify self_right with coefficient 0.5
-  let self_right_term = constraint
+  // Verify self_width with coefficient 0.5
+  let self_width_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfRight))
-    .expect("Should have self_right term");
-  assert_eq!(self_right_term.coefficient, 0.5);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfWidth))
+    .expect("Should have self_width term");
+  assert_eq!(self_width_term.coefficient, 0.5);
 
-  // Verify parent_left with coefficient -scale
-  let parent_left_term = constraint
+  // Verify parent_x with coefficient -scale
+  let parent_x_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentLeft))
-    .expect("Should have parent_left term");
-  assert_eq!(parent_left_term.coefficient, -scale);
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentX))
+    .expect("Should have parent_x term");
+  assert_eq!(parent_x_term.coefficient, -scale);
 
-  // Verify element.right() with coefficient -1.0
+  // Verify element.x() with coefficient -1.0
   let element_right_term = constraint
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementRight(ref e) if e.id == 123))
-    .expect("Should have element.right() term");
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ElementX(ref e) if e.id == 123))
+    .expect("Should have element.x() term");
   assert_eq!(element_right_term.coefficient, -1.0);
 }
 
@@ -598,9 +615,9 @@ fn test_all_three_types_combined() {
 #[test]
 fn test_constraint1_returns_single_constraint() {
   // Test that constraint1! returns a single ElementConstraint
-  // self_left == parent_left + 10.0
-  // Normalized: self_left - parent_left - 10.0 == 0
-  let single_constraint = constraint1!(self_left == parent_left + 10.0);
+  // self_x == parent_x + 10.0
+  // Normalized: self_x - parent_x - 10.0 == 0
+  let single_constraint = constraint1!(self_x == parent_x + 10.0);
 
   // Should be able to use it directly
   assert!(matches!(
@@ -616,9 +633,9 @@ fn test_constraint1_in_vec() {
   // Test that we can use constraint1! directly in a vec
   let constraints = ElementConstraints {
     constraints: vec![
-      constraint1!(self_top == parent_top),
+      constraint1!(self_y == parent_y),
       constraint1!(
-        self_bottom == parent_bottom,
+        self_height == parent_height,
         strength = ElementConstraints::WEAK
       ),
     ],
@@ -646,8 +663,8 @@ fn test_constraint1_with_runtime_expressions() {
   // Test with variables
   let offset_x = 10.0;
   let offset_y = 20.0;
-  let constraint = constraint1!(self_left == parent_left + offset_x);
-  let constraint2 = constraint1!(self_top == parent_top + offset_y * 2.0);
+  let constraint = constraint1!(self_x == parent_x + offset_x);
+  let constraint2 = constraint1!(self_y == parent_y + offset_y * 2.0);
 
   // These should compile and be valid constraints
   assert!(matches!(
@@ -665,7 +682,7 @@ fn test_constraint1_complex_runtime_expression() {
   let base_padding = 8.0;
   let multiplier = 2.0;
 
-  let constraint = constraint1!(self_left == parent_left + base_padding * multiplier);
+  let constraint = constraint1!(self_x == parent_x + base_padding * multiplier);
 
   assert!(matches!(
     constraint.operator,
@@ -678,9 +695,9 @@ fn test_constraint1_complex_runtime_expression() {
 fn test_constraint1_with_all_operators() {
   let offset = 5.0;
 
-  let c1 = constraint1!(self_left == parent_left + offset);
-  let c2 = constraint1!(self_right >= parent_right - offset);
-  let c3 = constraint1!(self_top <= parent_top + offset);
+  let c1 = constraint1!(self_x == parent_x + offset);
+  let c2 = constraint1!(self_width >= parent_width - offset);
+  let c3 = constraint1!(self_y <= parent_y + offset);
 
   assert!(matches!(c1.operator, ElementConstraintOperator::Equal));
   assert!(matches!(
@@ -695,9 +712,9 @@ fn test_constraint1_with_all_operators() {
 
 #[test]
 fn test_complex_constant_expression() {
-  // Test: self_top == parent_top - (5.0 + 10.0)
-  // Expected: self_top - parent_top + 15.0 == 0
-  let result = constraint!(self_top == parent_top - (5.0 + 10.0));
+  // Test: self_y == parent_y - (5.0 + 10.0)
+  // Expected: self_y - parent_y + 15.0 == 0
+  let result = constraint!(self_y == parent_y - (5.0 + 10.0));
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -708,9 +725,9 @@ fn test_complex_constant_expression() {
 
 #[test]
 fn test_integer_literals() {
-  // Test: self_left + 10 == parent_left
-  // Expected: self_left - parent_left + 10.0 == 0
-  let result = constraint!(self_left + 10 == parent_left);
+  // Test: self_x + 10 == parent_x
+  // Expected: self_x - parent_x + 10.0 == 0
+  let result = constraint!(self_x + 10 == parent_x);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -721,8 +738,8 @@ fn test_integer_literals() {
 
 #[test]
 fn test_custom_strength_literal() {
-  // Test: self_left == parent_left, strength = 1.0
-  let result = constraint!(self_left == parent_left, strength = 1.0);
+  // Test: self_x == parent_x, strength = 1.0
+  let result = constraint!(self_x == parent_x, strength = 1.0);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -732,9 +749,9 @@ fn test_custom_strength_literal() {
 
 #[test]
 fn test_custom_strength_constant() {
-  // Test: self_right >= parent_right, strength = ElementConstraints::WEAK
+  // Test: self_width >= parent_width, strength = ElementConstraints::WEAK
   let result = constraint!(
-    self_right >= parent_right,
+    self_width >= parent_width,
     strength = ElementConstraints::WEAK
   );
 
@@ -746,8 +763,8 @@ fn test_custom_strength_constant() {
 
 #[test]
 fn test_custom_strength_expression() {
-  // Test: self_top <= parent_top, strength = 5.0 * 2.0
-  let result = constraint!(self_top <= parent_top, strength = 5.0 * 2.0);
+  // Test: self_y <= parent_y, strength = 5.0 * 2.0
+  let result = constraint!(self_y <= parent_y, strength = 5.0 * 2.0);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -758,17 +775,17 @@ fn test_custom_strength_expression() {
 #[test]
 fn test_all_variable_types() {
   // Test each variable type can be used
-  let _r1 = constraint!(parent_left == self_left);
-  let _r2 = constraint!(parent_right == self_right);
-  let _r3 = constraint!(parent_top == self_top);
-  let _r4 = constraint!(parent_bottom == self_bottom);
+  let _r1 = constraint!(parent_x == self_x);
+  let _r2 = constraint!(parent_width == self_width);
+  let _r3 = constraint!(parent_y == self_y);
+  let _r4 = constraint!(parent_height == self_height);
 }
 
 #[test]
 fn test_right_to_left_movement() {
-  // Test: 0.0 == self_left - parent_left
-  // Expected: -self_left + parent_left == 0 (or self_left - parent_left == 0 after simplification)
-  let result = constraint!(0.0 == self_left - parent_left);
+  // Test: 0.0 == self_x - parent_x
+  // Expected: -self_x + parent_x == 0 (or self_x - parent_x == 0 after simplification)
+  let result = constraint!(0.0 == self_x - parent_x);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -777,28 +794,28 @@ fn test_right_to_left_movement() {
   assert_eq!(c.expression.terms.len(), 2);
 
   // The terms should be negated since we move them from right to left
-  let self_left_term = c
+  let self_x_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfX))
     .unwrap();
-  assert_eq!(self_left_term.coefficient, -1.0);
+  assert_eq!(self_x_term.coefficient, -1.0);
 
-  let parent_left_term = c
+  let parent_x_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentLeft))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentX))
     .unwrap();
-  assert_eq!(parent_left_term.coefficient, 1.0);
+  assert_eq!(parent_x_term.coefficient, 1.0);
 }
 
 #[test]
 fn test_nested_parentheses() {
-  // Test: ((self_left + 10.0) - 5.0) == parent_left
-  // Expected: self_left - parent_left + 5.0 == 0
-  let result = constraint!(((self_left + 10.0) - 5.0) == parent_left);
+  // Test: ((self_x + 10.0) - 5.0) == parent_x
+  // Expected: self_x - parent_x + 5.0 == 0
+  let result = constraint!(((self_x + 10.0) - 5.0) == parent_x);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -809,9 +826,9 @@ fn test_nested_parentheses() {
 
 #[test]
 fn test_multiplication_distributive() {
-  // Test: 2.0 * (self_left + parent_left) == self_right
-  // Expected: 2.0 * self_left + 2.0 * parent_left - self_right == 0
-  let result = constraint!(2.0 * (self_left + parent_left) == self_right);
+  // Test: 2.0 * (self_x + parent_x) == self_width
+  // Expected: 2.0 * self_x + 2.0 * parent_x - self_width == 0
+  let result = constraint!(2.0 * (self_x + parent_x) == self_width);
 
   assert_eq!(result.constraints.len(), 1);
   let c = &result.constraints[0];
@@ -819,27 +836,27 @@ fn test_multiplication_distributive() {
   assert_eq!(c.expression.constant, 0.0);
   assert_eq!(c.expression.terms.len(), 3);
 
-  let self_left_term = c
+  let self_x_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfLeft))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfX))
     .unwrap();
-  assert_eq!(self_left_term.coefficient, 2.0);
+  assert_eq!(self_x_term.coefficient, 2.0);
 
-  let parent_left_term = c
+  let parent_x_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentLeft))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::ParentX))
     .unwrap();
-  assert_eq!(parent_left_term.coefficient, 2.0);
+  assert_eq!(parent_x_term.coefficient, 2.0);
 
-  let self_right_term = c
+  let self_width_term = c
     .expression
     .terms
     .iter()
-    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfRight))
+    .find(|t| matches!(t.variable, ElementConstraintVariable::SelfWidth))
     .unwrap();
-  assert_eq!(self_right_term.coefficient, -1.0);
+  assert_eq!(self_width_term.coefficient, -1.0);
 }

@@ -201,14 +201,14 @@ impl Term {
 fn is_constraint_variable(name: &str) -> bool {
   matches!(
     name,
-    "parent_left"
-      | "parent_right"
-      | "parent_top"
-      | "parent_bottom"
-      | "self_left"
-      | "self_right"
-      | "self_top"
-      | "self_bottom"
+    "parent_x"
+      | "parent_y"
+      | "parent_width"
+      | "parent_height"
+      | "self_x"
+      | "self_y"
+      | "self_width"
+      | "self_height"
       | "screen_width"
       | "screen_height"
   )
@@ -451,17 +451,17 @@ fn map_variable_name(
   match name {
     "screen_width" => quote! { #crate_name::prelude::ElementConstraintVariable::ScreenWidth },
     "screen_height" => quote! { #crate_name::prelude::ElementConstraintVariable::ScreenHeight },
-    "parent_left" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentLeft },
-    "parent_right" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentRight },
-    "parent_top" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentTop },
-    "parent_bottom" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentBottom },
-    "self_left" => quote! { #crate_name::prelude::ElementConstraintVariable::SelfLeft },
-    "self_right" => quote! { #crate_name::prelude::ElementConstraintVariable::SelfRight },
-    "self_top" => quote! { #crate_name::prelude::ElementConstraintVariable::SelfTop },
-    "self_bottom" => quote! { #crate_name::prelude::ElementConstraintVariable::SelfBottom },
+    "parent_x" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentX },
+    "parent_y" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentY },
+    "parent_width" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentWidth },
+    "parent_height" => quote! { #crate_name::prelude::ElementConstraintVariable::ParentHeight },
+    "self_x" => quote! { #crate_name::prelude::ElementConstraintVariable::SelfX },
+    "self_y" => quote! { #crate_name::prelude::ElementConstraintVariable::SelfY },
+    "self_width" => quote! { #crate_name::prelude::ElementConstraintVariable::SelfWidth },
+    "self_height" => quote! { #crate_name::prelude::ElementConstraintVariable::SelfHeight },
     _ => abort!(
       proc_macro2::Span::call_site(),
-      "Unknown variable '{}'. Valid variables: parent_left, parent_right, parent_top, parent_bottom, self_left, self_right, self_top, self_bottom",
+      "Unknown variable '{}'. Valid variables: parent_x, parent_y, parent_width, parent_height, self_x, self_y, self_width, self_height",
       name
     ),
   }

@@ -33,10 +33,10 @@ impl Orchestrator {
   pub fn new(debug_enabled: bool) -> Self {
     Orchestrator {
       root_vars: RootVars {
-        render_left: KasuariVariable::new(),
-        render_top: KasuariVariable::new(),
-        render_right: KasuariVariable::new(),
-        render_bottom: KasuariVariable::new(),
+        render_x: KasuariVariable::new(),
+        render_y: KasuariVariable::new(),
+        render_width: KasuariVariable::new(),
+        render_height: KasuariVariable::new(),
       },
       elements: Vec::new(),
       debug_enabled,
@@ -70,10 +70,10 @@ impl Orchestrator {
       constraints: vec![],
       debug_constraints: None,
       layout_vars: AllocatedElementLayoutVars {
-        self_bottom: self.root_vars.render_bottom,
-        self_right: self.root_vars.render_right,
-        self_left: self.root_vars.render_left,
-        self_top: self.root_vars.render_top,
+        self_x: self.root_vars.render_x,
+        self_y: self.root_vars.render_y,
+        self_width: self.root_vars.render_width,
+        self_height: self.root_vars.render_height,
       },
     });
     let element = self.elements.last_mut().unwrap();
@@ -97,10 +97,10 @@ impl Orchestrator {
 
     let mut solver = KasuariSolver::new();
     let const_constraints = solver.add_constraints([
-      self.root_vars.render_left | EQ(Strength::REQUIRED) | 0.0,
-      self.root_vars.render_top | EQ(Strength::REQUIRED) | 0.0,
-      self.root_vars.render_right | EQ(Strength::REQUIRED) | width,
-      self.root_vars.render_bottom | EQ(Strength::REQUIRED) | height,
+      self.root_vars.render_x | EQ(Strength::REQUIRED) | 0.0,
+      self.root_vars.render_y | EQ(Strength::REQUIRED) | 0.0,
+      self.root_vars.render_width | EQ(Strength::REQUIRED) | width,
+      self.root_vars.render_height | EQ(Strength::REQUIRED) | height,
     ]);
     if let Err(err) = const_constraints {
       eprintln!("Solver error on root constraints: {}", err);
@@ -144,18 +144,18 @@ impl Orchestrator {
     let layouting_duration = rendering_start - layouting_start;
 
     for (id, element) in self.elements.iter().enumerate() {
-      let bottom = solver.get_value(element.layout_vars.self_bottom);
-      let right = solver.get_value(element.layout_vars.self_right);
-      let left = solver.get_value(element.layout_vars.self_left);
-      let top = solver.get_value(element.layout_vars.self_top);
+      let x = solver.get_value(element.layout_vars.self_x);
+      let y = solver.get_value(element.layout_vars.self_y);
+      let width = solver.get_value(element.layout_vars.self_width);
+      let height = solver.get_value(element.layout_vars.self_height);
 
       if let Some(component) = &element.component {
         component.render(&mut RenderContext {
           layout: &ResolvedLayout {
-            width: (right - left) as f32,
-            height: (bottom - top) as f32,
-            x: left as f32,
-            y: top as f32,
+            x: x as f32,
+            y: y as f32,
+            width: width as f32,
+            height: height as f32,
           },
           theme,
           renderer,
@@ -205,15 +205,15 @@ impl Orchestrator {
     let children = relationships.get(&element_id).unwrap();
 
     let layout = {
-      let bottom = solver.get_value(element.layout_vars.self_bottom) as f32;
-      let right = solver.get_value(element.layout_vars.self_right) as f32;
-      let left = solver.get_value(element.layout_vars.self_left) as f32;
-      let top = solver.get_value(element.layout_vars.self_top) as f32;
+      let x = solver.get_value(element.layout_vars.self_x) as f32;
+      let y = solver.get_value(element.layout_vars.self_y) as f32;
+      let width = solver.get_value(element.layout_vars.self_width) as f32;
+      let height = solver.get_value(element.layout_vars.self_height) as f32;
       ResolvedLayout {
-        x: left,
-        y: top,
-        width: right - left,
-        height: bottom - top,
+        x,
+        y,
+        width,
+        height,
       }
     };
 
@@ -249,20 +249,20 @@ pub struct Element {
 }
 
 impl Element {
-  pub fn left(&self) -> ElementConstraintVariable {
-    ElementConstraintVariable::ElementLeft(*self)
+  pub fn x(&self) -> ElementConstraintVariable {
+    ElementConstraintVariable::ElementX(*self)
   }
 
-  pub fn right(&self) -> ElementConstraintVariable {
-    ElementConstraintVariable::ElementRight(*self)
+  pub fn y(&self) -> ElementConstraintVariable {
+    ElementConstraintVariable::ElementY(*self)
   }
 
-  pub fn top(&self) -> ElementConstraintVariable {
-    ElementConstraintVariable::ElementTop(*self)
+  pub fn width(&self) -> ElementConstraintVariable {
+    ElementConstraintVariable::ElementWidth(*self)
   }
 
-  pub fn bottom(&self) -> ElementConstraintVariable {
-    ElementConstraintVariable::ElementBottom(*self)
+  pub fn height(&self) -> ElementConstraintVariable {
+    ElementConstraintVariable::ElementHeight(*self)
   }
 }
 
@@ -277,10 +277,10 @@ struct AllocatedElement {
 }
 
 struct AllocatedElementLayoutVars {
-  self_left: KasuariVariable,
-  self_top: KasuariVariable,
-  self_right: KasuariVariable,
-  self_bottom: KasuariVariable,
+  self_x: KasuariVariable,
+  self_y: KasuariVariable,
+  self_width: KasuariVariable,
+  self_height: KasuariVariable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -324,10 +324,10 @@ pub struct DebugAllocatedElement {
 }
 
 struct RootVars {
-  render_left: KasuariVariable,
-  render_top: KasuariVariable,
-  render_right: KasuariVariable,
-  render_bottom: KasuariVariable,
+  render_x: KasuariVariable,
+  render_y: KasuariVariable,
+  render_width: KasuariVariable,
+  render_height: KasuariVariable,
 }
 
 pub struct ElementContext<'a> {
@@ -370,10 +370,10 @@ impl<'a> ElementContext<'a> {
       key,
       direct_child_component_occurrences: HashMap::new(),
       layout_vars: AllocatedElementLayoutVars {
-        self_left: KasuariVariable::new(),
-        self_top: KasuariVariable::new(),
-        self_right: KasuariVariable::new(),
-        self_bottom: KasuariVariable::new(),
+        self_x: KasuariVariable::new(),
+        self_y: KasuariVariable::new(),
+        self_width: KasuariVariable::new(),
+        self_height: KasuariVariable::new(),
       },
     });
     Element { id }
@@ -444,12 +444,12 @@ impl<'a> ElementContext<'a> {
     // Insert default system constraints
     if element.constraints.is_empty() {
       // Ensure that elements are always positive width & height or 0
-      element.constraints.push(
-        element.layout_vars.self_right | GE(Strength::REQUIRED) | element.layout_vars.self_left,
-      );
-      element.constraints.push(
-        element.layout_vars.self_bottom | GE(Strength::REQUIRED) | element.layout_vars.self_top,
-      );
+      element
+        .constraints
+        .push(element.layout_vars.self_width | GE(Strength::REQUIRED) | 0.0);
+      element
+        .constraints
+        .push(element.layout_vars.self_height | GE(Strength::REQUIRED) | 0.0);
     }
 
     element.constraints.extend(constraints);
@@ -496,51 +496,51 @@ impl<'a> ElementContext<'a> {
     let parent_element = element.parent_element.and_then(|id| self.elements.get(id));
     match variable {
       // Screen
-      ElementConstraintVariable::ScreenWidth => self.root_vars.render_right,
-      ElementConstraintVariable::ScreenHeight => self.root_vars.render_bottom,
+      ElementConstraintVariable::ScreenWidth => self.root_vars.render_width,
+      ElementConstraintVariable::ScreenHeight => self.root_vars.render_height,
       // Self
-      ElementConstraintVariable::SelfLeft => element.layout_vars.self_left,
-      ElementConstraintVariable::SelfTop => element.layout_vars.self_top,
-      ElementConstraintVariable::SelfRight => element.layout_vars.self_right,
-      ElementConstraintVariable::SelfBottom => element.layout_vars.self_bottom,
+      ElementConstraintVariable::SelfX => element.layout_vars.self_x,
+      ElementConstraintVariable::SelfY => element.layout_vars.self_y,
+      ElementConstraintVariable::SelfWidth => element.layout_vars.self_width,
+      ElementConstraintVariable::SelfHeight => element.layout_vars.self_height,
       // Parent
-      ElementConstraintVariable::ParentLeft => parent_element
-        .map(|parent| parent.layout_vars.self_left)
-        .unwrap_or_else(|| self.root_vars.render_left),
-      ElementConstraintVariable::ParentTop => parent_element
-        .map(|parent| parent.layout_vars.self_top)
-        .unwrap_or_else(|| self.root_vars.render_top),
-      ElementConstraintVariable::ParentRight => parent_element
-        .map(|parent| parent.layout_vars.self_right)
-        .unwrap_or_else(|| self.root_vars.render_right),
-      ElementConstraintVariable::ParentBottom => parent_element
-        .map(|parent| parent.layout_vars.self_bottom)
-        .unwrap_or_else(|| self.root_vars.render_bottom),
+      ElementConstraintVariable::ParentX => parent_element
+        .map(|parent| parent.layout_vars.self_x)
+        .unwrap_or_else(|| self.root_vars.render_x),
+      ElementConstraintVariable::ParentY => parent_element
+        .map(|parent| parent.layout_vars.self_y)
+        .unwrap_or_else(|| self.root_vars.render_y),
+      ElementConstraintVariable::ParentWidth => parent_element
+        .map(|parent| parent.layout_vars.self_width)
+        .unwrap_or_else(|| self.root_vars.render_width),
+      ElementConstraintVariable::ParentHeight => parent_element
+        .map(|parent| parent.layout_vars.self_height)
+        .unwrap_or_else(|| self.root_vars.render_height),
       // Other Elements
-      ElementConstraintVariable::ElementLeft(element) => self
+      ElementConstraintVariable::ElementX(element) => self
         .elements
         .get(element.id)
-        .map(|element| element.layout_vars.self_left)
-        .or_else(|| parent_element.map(|parent| parent.layout_vars.self_left))
-        .unwrap_or(self.root_vars.render_left),
-      ElementConstraintVariable::ElementTop(element) => self
+        .map(|element| element.layout_vars.self_x)
+        .or_else(|| parent_element.map(|parent| parent.layout_vars.self_x))
+        .unwrap_or(self.root_vars.render_x),
+      ElementConstraintVariable::ElementY(element) => self
         .elements
         .get(element.id)
-        .map(|element| element.layout_vars.self_top)
-        .or_else(|| parent_element.map(|parent| parent.layout_vars.self_top))
-        .unwrap_or(self.root_vars.render_top),
-      ElementConstraintVariable::ElementRight(element) => self
+        .map(|element| element.layout_vars.self_y)
+        .or_else(|| parent_element.map(|parent| parent.layout_vars.self_y))
+        .unwrap_or(self.root_vars.render_y),
+      ElementConstraintVariable::ElementWidth(element) => self
         .elements
         .get(element.id)
-        .map(|element| element.layout_vars.self_right)
-        .or_else(|| parent_element.map(|parent| parent.layout_vars.self_right))
-        .unwrap_or(self.root_vars.render_right),
-      ElementConstraintVariable::ElementBottom(element) => self
+        .map(|element| element.layout_vars.self_width)
+        .or_else(|| parent_element.map(|parent| parent.layout_vars.self_width))
+        .unwrap_or(self.root_vars.render_width),
+      ElementConstraintVariable::ElementHeight(element) => self
         .elements
         .get(element.id)
-        .map(|element| element.layout_vars.self_bottom)
-        .or_else(|| parent_element.map(|parent| parent.layout_vars.self_bottom))
-        .unwrap_or(self.root_vars.render_bottom),
+        .map(|element| element.layout_vars.self_height)
+        .or_else(|| parent_element.map(|parent| parent.layout_vars.self_height))
+        .unwrap_or(self.root_vars.render_height),
     }
   }
 }

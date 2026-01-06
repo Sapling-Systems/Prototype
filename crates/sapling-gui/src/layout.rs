@@ -28,19 +28,19 @@ impl ElementConstraints {
 
   pub fn absolute_position(x: f32, y: f32) -> Self {
     ElementConstraints {
-      constraints: vec![constraint1!(self_left == x), constraint1!(self_top == y)],
+      constraints: vec![constraint1!(self_x == x), constraint1!(self_y == y)],
     }
   }
 
   pub fn absolute_top(spacing: f32) -> Self {
     ElementConstraints {
-      constraints: vec![constraint1!(self_top == spacing)],
+      constraints: vec![constraint1!(self_y == spacing)],
     }
   }
 
   pub fn absolute_right(spacing: f32) -> Self {
     ElementConstraints {
-      constraints: vec![constraint1!(self_right == screen_width - spacing)],
+      constraints: vec![constraint1!(self_x + self_width == screen_width - spacing)],
     }
   }
 
@@ -52,10 +52,10 @@ impl ElementConstraints {
   ) -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_right == parent_right - padding_right),
-        constraint1!(self_bottom == parent_bottom - padding_bottom),
-        constraint1!(self_left == parent_left + padding_left),
-        constraint1!(self_top == parent_top + padding_top),
+        constraint1!(self_x == parent_x + padding_left),
+        constraint1!(self_y == parent_y + padding_top),
+        constraint1!(self_width == parent_width - padding_left - padding_right),
+        constraint1!(self_height == parent_height - padding_top - padding_bottom),
       ],
     }
   }
@@ -63,8 +63,8 @@ impl ElementConstraints {
   pub fn cover_parent_horizontal(padding: f32) -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_right == parent_right - padding),
-        constraint1!(self_left == parent_left + padding),
+        constraint1!(self_x == parent_x + padding),
+        constraint1!(self_width == parent_width - padding - padding),
       ],
     }
   }
@@ -72,8 +72,8 @@ impl ElementConstraints {
   pub fn cover_parent_vertical(padding: f32) -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_bottom == parent_bottom - padding),
-        constraint1!(self_top == parent_top + padding),
+        constraint1!(self_y == parent_y + padding),
+        constraint1!(self_height == parent_height - padding - padding),
       ],
     }
   }
@@ -81,10 +81,10 @@ impl ElementConstraints {
   pub fn cover_parent_even_padding(padding: f32) -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_right == parent_right - padding),
-        constraint1!(self_bottom == parent_bottom - padding),
-        constraint1!(self_left == parent_left + padding),
-        constraint1!(self_top == parent_top + padding),
+        constraint1!(self_x == parent_x + padding),
+        constraint1!(self_y == parent_y + padding),
+        constraint1!(self_width == parent_width - padding - padding),
+        constraint1!(self_height == parent_height - padding - padding),
       ],
     }
   }
@@ -92,29 +92,29 @@ impl ElementConstraints {
   pub fn relative_position() -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_left == parent_left),
-        constraint1!(self_top == parent_top),
+        constraint1!(self_x == parent_x),
+        constraint1!(self_y == parent_y),
       ],
     }
   }
 
   pub fn relative_top(spacing: f32) -> Self {
     ElementConstraints {
-      constraints: vec![constraint1!(self_top == parent_top + spacing)],
+      constraints: vec![constraint1!(self_y == parent_y + spacing)],
     }
   }
 
   pub fn relative_left(spacing: f32) -> Self {
     ElementConstraints {
-      constraints: vec![constraint1!(self_left == parent_left + spacing)],
+      constraints: vec![constraint1!(self_x == parent_x + spacing)],
     }
   }
 
   pub fn center() -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_left + self_right == parent_left + parent_right),
-        constraint1!(self_top + self_bottom == parent_top + parent_bottom),
+        constraint1!(self_x + self_width / 2.0 == parent_x + parent_width / 2.0),
+        constraint1!(self_y + self_height / 2.0 == parent_y + parent_height / 2.0),
       ],
     }
   }
@@ -122,8 +122,8 @@ impl ElementConstraints {
   pub fn fixed_size(width: f32, height: f32) -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_right - self_left == width),
-        constraint1!(self_bottom - self_top == height),
+        constraint1!(self_width == width),
+        constraint1!(self_height == height),
       ],
     }
   }
@@ -131,29 +131,33 @@ impl ElementConstraints {
   pub fn cover_parent() -> Self {
     ElementConstraints {
       constraints: vec![
-        constraint1!(self_right == parent_right),
-        constraint1!(self_bottom == parent_bottom),
-        constraint1!(self_left == parent_left),
-        constraint1!(self_top == parent_top),
+        constraint1!(self_x == parent_x),
+        constraint1!(self_y == parent_y),
+        constraint1!(self_width == parent_width),
+        constraint1!(self_height == parent_height),
       ],
     }
   }
 
   pub fn anchor_to_right_of(element: Element, spacing: f32) -> Self {
     ElementConstraints {
-      constraints: vec![constraint1!(self_left == element.right() + spacing)],
+      constraints: vec![constraint1!(
+        self_x == element.x() + element.width() + spacing
+      )],
     }
   }
 
   pub fn anchor_to_top_of(element: Element, spacing: f32) -> Self {
     ElementConstraints {
-      constraints: vec![constraint1!(self_top == element.top() + spacing)],
+      constraints: vec![constraint1!(self_y == element.y() + spacing)],
     }
   }
 
   pub fn anchor_to_bottom_of(element: Element, spacing: f32) -> Self {
     ElementConstraints {
-      constraints: vec![constraint1!(self_bottom == element.bottom() + spacing)],
+      constraints: vec![constraint1!(
+        self_y == element.y() + element.height() + spacing
+      )],
     }
   }
 }
@@ -188,18 +192,18 @@ pub enum ElementConstraintOperator {
 pub enum ElementConstraintVariable {
   ScreenWidth,
   ScreenHeight,
-  ParentLeft,
-  ParentRight,
-  ParentTop,
-  ParentBottom,
-  SelfLeft,
-  SelfRight,
-  SelfTop,
-  SelfBottom,
-  ElementLeft(Element),
-  ElementRight(Element),
-  ElementTop(Element),
-  ElementBottom(Element),
+  ParentX,
+  ParentY,
+  ParentWidth,
+  ParentHeight,
+  SelfX,
+  SelfY,
+  SelfWidth,
+  SelfHeight,
+  ElementX(Element),
+  ElementY(Element),
+  ElementWidth(Element),
+  ElementHeight(Element),
 }
 
 /// Trait for types that can be converted to constraint terms.

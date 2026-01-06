@@ -149,14 +149,14 @@ impl Component for DebuggerView {
       for constraint in &selected_node.layout_constraints.constraints {
         dependencies.extend(constraint.expression.terms.iter().filter_map(
           |term| match term.variable {
-            ElementConstraintVariable::ParentLeft => selected_node.parent_id,
-            ElementConstraintVariable::ParentRight => selected_node.parent_id,
-            ElementConstraintVariable::ParentTop => selected_node.parent_id,
-            ElementConstraintVariable::ParentBottom => selected_node.parent_id,
-            ElementConstraintVariable::ElementLeft(element) => Some(element.id),
-            ElementConstraintVariable::ElementRight(element) => Some(element.id),
-            ElementConstraintVariable::ElementTop(element) => Some(element.id),
-            ElementConstraintVariable::ElementBottom(element) => Some(element.id),
+            ElementConstraintVariable::ParentX => selected_node.parent_id,
+            ElementConstraintVariable::ParentY => selected_node.parent_id,
+            ElementConstraintVariable::ParentWidth => selected_node.parent_id,
+            ElementConstraintVariable::ParentHeight => selected_node.parent_id,
+            ElementConstraintVariable::ElementX(element) => Some(element.id),
+            ElementConstraintVariable::ElementY(element) => Some(element.id),
+            ElementConstraintVariable::ElementWidth(element) => Some(element.id),
+            ElementConstraintVariable::ElementHeight(element) => Some(element.id),
             _ => None,
           },
         ));
@@ -296,18 +296,18 @@ impl Component for ConstraintTextView {
     let mut expression = String::new();
     for (index, term) in self.constraint.expression.terms.iter().enumerate() {
       let var_name = match term.variable {
-        ElementConstraintVariable::ElementBottom(element) => format!("${}::bottom", element.id),
-        ElementConstraintVariable::ElementLeft(element) => format!("${}::left", element.id),
-        ElementConstraintVariable::ElementRight(element) => format!("${}::right", element.id),
-        ElementConstraintVariable::ElementTop(element) => format!("${}::top", element.id),
-        ElementConstraintVariable::ParentBottom => "parent::bottom".to_string(),
-        ElementConstraintVariable::ParentLeft => "parent::left".to_string(),
-        ElementConstraintVariable::ParentRight => "parent::right".to_string(),
-        ElementConstraintVariable::ParentTop => "parent::top".to_string(),
-        ElementConstraintVariable::SelfLeft => "left".to_string(),
-        ElementConstraintVariable::SelfBottom => "bottom".to_string(),
-        ElementConstraintVariable::SelfRight => "right".to_string(),
-        ElementConstraintVariable::SelfTop => "top".to_string(),
+        ElementConstraintVariable::ElementX(element) => format!("${}::x", element.id),
+        ElementConstraintVariable::ElementY(element) => format!("${}::y", element.id),
+        ElementConstraintVariable::ElementWidth(element) => format!("${}::width", element.id),
+        ElementConstraintVariable::ElementHeight(element) => format!("${}::height", element.id),
+        ElementConstraintVariable::ParentX => "parent::x".to_string(),
+        ElementConstraintVariable::ParentY => "parent::y".to_string(),
+        ElementConstraintVariable::ParentWidth => "parent::width".to_string(),
+        ElementConstraintVariable::ParentHeight => "parent::height".to_string(),
+        ElementConstraintVariable::SelfX => "x".to_string(),
+        ElementConstraintVariable::SelfY => "y".to_string(),
+        ElementConstraintVariable::SelfWidth => "width".to_string(),
+        ElementConstraintVariable::SelfHeight => "height".to_string(),
         ElementConstraintVariable::ScreenWidth => "screen::width".to_string(),
         ElementConstraintVariable::ScreenHeight => "screen::height".to_string(),
       };
