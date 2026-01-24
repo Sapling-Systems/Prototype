@@ -1,19 +1,21 @@
 use raylib::prelude::*;
 use sapling_app::App;
-use sapling_data_model::SubjectSelector;
+use sapling_data_model::{Query, SubjectSelector};
 use sapling_gui::{DebuggerView, RaylibRenderer, RaylibRendererState, prelude::*};
 
 use crate::{
   components::{
     loc::LinesOfCodeView,
     panel::PanelView,
-    structure_editor::{StructureEditor, data::SubjectFactCollection},
+    structure_editor::{StructureEditor, SubjectCollectionView, data::SubjectFactCollection},
   },
   demo::insert_demo_data,
+  input::Action,
 };
 
 mod components;
 mod demo;
+mod input;
 
 fn main() {
   let mut app = App::new(128);
@@ -30,11 +32,17 @@ fn main() {
   let mut renderer_state = RaylibRendererState::new(&mut rl, &thread);
   let mut orchestrator = Orchestrator::new(true);
 
+  let mut action_map = ActionMap::default();
+  action_map.add_action(Action::EditorSelectModeLeft, KeyboardKey::KEY_H);
+  action_map.add_action(Action::EditorSelectModeRight, KeyboardKey::KEY_L);
+  action_map.add_action(Action::EditorSelectModeUp, KeyboardKey::KEY_K);
+  action_map.add_action(Action::EditorSelectModeDown, KeyboardKey::KEY_J);
+
   while !rl.window_should_close() {
     let width = rl.get_render_width();
     let height = rl.get_render_height();
 
-    let input_state = InputState::from_raylib(&mut rl);
+    let input_state = InputState::from_raylib(&mut rl, action_map.clone());
 
     let mut d = rl.begin_drawing(&thread);
 
@@ -77,38 +85,14 @@ struct RootView;
 
 impl Component for RootView {
   fn construct(&mut self, context: &mut ElementContext) {
-    PanelView::new()
-      .with_content(|context| {
-        let loc_view = LinesOfCodeView::new(vec![0; 10], 2)
-          .with_layout(vec![
-            ElementConstraints::relative_left(context.theme.spacing_large),
-            ElementConstraints::relative_top(context.theme.spacing_large),
-          ])
-          .build(context);
-
-        let person1 = context.app.get_global_by_name("Person 1").unwrap();
-        let subject_fact_collection = SubjectFactCollection::new(
-          SubjectSelector {
-            subject: person1,
-            evaluated: false,
-            property: None,
-          },
-          context.app,
-        );
-
-        StructureEditor::new(subject_fact_collection)
-          .with_layout(vec![
-            ElementConstraints::anchor_to_right_of(loc_view, context.theme.spacing_large),
-            ElementConstraints::relative_top(context.theme.spacing_large),
-          ])
-          .build(context);
-      })
-      .with_layout(vec![
-        ElementConstraints::relative_top(32.0),
-        ElementConstraints::relative_left(32.0),
-        ElementConstraints::fixed_size(500.0, 500.0),
-      ])
-      .build(context);
+    let person1 = context.app.get_global_by_name("Person 1").unwrap();
+    StructureEditor::new(Query {
+      evaluated: false,
+      meta: None,
+      property: None,
+      subject: person1,
+    })
+    .build(context);
 
     DebuggerView::new().build(context);
   }

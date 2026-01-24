@@ -1,7 +1,7 @@
 use std::{
   any::{Any, TypeId},
   collections::HashMap,
-  time::Duration,
+  time::{Duration, Instant},
 };
 
 use kasuari::{
@@ -92,6 +92,7 @@ impl Orchestrator {
       render_width: width,
       render_height: height,
       prev_debug_nodes: &self.debug_tree,
+      input_state,
       theme,
       app,
     });
@@ -146,6 +147,10 @@ impl Orchestrator {
             self_x + self_width >= child_x + child_width,
             strength = Strength::STRONG.value() as f32
           ));
+          additional_constraints.push(constraint1!(
+            self_width == 0,
+            strength = Strength::WEAK.value() as f32
+          ));
         }
       }
       if !has_height_constraint {
@@ -170,6 +175,7 @@ impl Orchestrator {
         root_vars: &self.root_vars,
         elements: &mut self.elements,
         prev_debug_nodes: &self.debug_tree,
+        input_state,
       };
       element_context.set_element_constraints(&Element { id: element_id }, additional_constraints);
     }
@@ -384,6 +390,7 @@ pub struct ElementContext<'a> {
   render_height: f32,
   debug_enabled: bool,
   mutable_state: &'a mut HashMap<ComponentStateKey, Box<dyn Any>>,
+  pub input_state: &'a InputState,
   pub prev_debug_nodes: &'a Option<Vec<DebugAllocatedElement>>,
   pub theme: &'a mut Theme,
   pub app: &'a mut App,
@@ -440,6 +447,7 @@ impl<'a> ElementContext<'a> {
       mutable_state: self.mutable_state,
       theme: self.theme,
       app: self.app,
+      input_state: self.input_state,
     });
     self.elements[element.id].component = Some(component);
   }
@@ -456,6 +464,7 @@ impl<'a> ElementContext<'a> {
       mutable_state: self.mutable_state,
       theme: self.theme,
       app: self.app,
+      input_state: self.input_state,
     }
   }
 

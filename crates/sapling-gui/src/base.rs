@@ -1,8 +1,14 @@
-use std::{any::Any, arch::x86_64::_MM_EXCEPT_INEXACT, marker::PhantomData};
+use std::{
+  any::Any,
+  arch::x86_64::_MM_EXCEPT_INEXACT,
+  hash::{DefaultHasher, Hash, Hasher},
+  marker::PhantomData,
+};
 
 use kasuari::Strength;
 use raylib::{
   color::Color,
+  ffi::KeyboardKey,
   math::{Rectangle, Vector2, Vector4},
 };
 use sapling_gui_macro::constraint1;
@@ -175,6 +181,7 @@ pub struct TextView {
   horizontal_alignment: TextHorizontalAlignment,
   vertical_alignment: TextVerticalAlignment,
   auto_size: bool,
+  line_height: f32,
 }
 
 impl TextView {
@@ -185,7 +192,13 @@ impl TextView {
       horizontal_alignment: TextHorizontalAlignment::Left,
       vertical_alignment: TextVerticalAlignment::Top,
       auto_size: true,
+      line_height: 1.0,
     }
+  }
+
+  pub fn with_line_height(mut self, line_height: f32) -> Self {
+    self.line_height = line_height;
+    self
   }
 
   pub fn with_horizontal_alignment(mut self, alignment: TextHorizontalAlignment) -> Self {
@@ -202,9 +215,10 @@ impl TextView {
 impl Component for TextView {
   fn construct(&mut self, context: &mut ElementContext) {
     let font_config = context.theme.text_config(self.variant);
-    let expected_size = font_config
+    let mut expected_size = font_config
       .font
       .calculate_text_size(&self.text, font_config.size);
+    expected_size.y *= self.line_height;
 
     let grow_width = self.horizontal_alignment == TextHorizontalAlignment::Left && self.auto_size;
     let grow_height = self.vertical_alignment == TextVerticalAlignment::Top && self.auto_size;
@@ -444,12 +458,20 @@ impl Component for Pressable {
   }
 }
 
-#[derive(Clone, Copy)]
 pub struct MutableState<T: Any + Clone + 'static> {
   name: &'static str,
   element_id: usize,
   _p: PhantomData<T>,
 }
+
+// Manually implement Clone and Copy for all T, since MutableState doesn't actually store T
+impl<T: Any + Clone + 'static> Clone for MutableState<T> {
+  fn clone(&self) -> Self {
+    *self
+  }
+}
+
+impl<T: Any + Clone + 'static> Copy for MutableState<T> {}
 
 impl<T: Any + Clone + 'static> MutableState<T> {
   pub fn new<FInit: FnOnce() -> T>(
@@ -470,5 +492,47 @@ impl<T: Any + Clone + 'static> MutableState<T> {
 
   pub fn set_direct(&self, context: &mut impl StatefulContext, new_value: T) {
     context.set_state(self.element_id, self.name, new_value);
+  }
+}
+
+pub struct FocusableInteractiveView {
+  action_handlers: Vec<(u64, Box<dyn FnOnce(&mut ElementContext)>)>,
+}
+
+impl std::fmt::Debug for FocusableInteractiveView {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("FocusableInteractiveView").finish()
+  }
+}
+
+impl FocusableInteractiveView {
+  pub fn new() -> Self {
+    Self {
+      action_handlers: Vec::new(),
+    }
+  }
+
+  pub fn with_action_handler<F: FnOnce(&mut ElementContext) + 'static>(
+    mut self,
+    action: impl Hash,
+    handler: F,
+  ) -> Self {
+    let hash = {
+      let mut hasher = DefaultHasher::new();
+      action.hash(&mut hasher);
+      hasher.finish()
+    };
+    self.action_handlers.push((hash, Box::new(handler)));
+    self
+  }
+}
+
+impl Component for FocusableInteractiveView {
+  fn construct(&mut self, context: &mut ElementContext) {
+    for (hash, handler) in self.action_handlers.drain(..) {
+      if context.input_state.is_action_pressed(hash) {
+        handler(context);
+      }
+    }
   }
 }

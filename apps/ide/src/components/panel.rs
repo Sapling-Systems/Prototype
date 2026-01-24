@@ -48,12 +48,11 @@ impl Component for PanelView {
       .with_background_color(context.theme.color_background_contrast)
       .with_border_radius_even(context.theme.radius_default)
       .with_drop_shadow(context.theme.drop_shadow_default.clone())
-      .with_layout(vec![ElementConstraints::cover_parent_padding(
-        0.0,
-        context.theme.spacing_xlarge,
-        0.0,
-        0.0,
-      )])
+      .with_layout(vec![
+        ElementConstraints::relative_left(0.0),
+        ElementConstraints::relative_top(context.theme.spacing_xlarge),
+        ElementConstraints::fixed_size(500.0, 300.0),
+      ])
       .with_children(|context| {
         content_children(context);
       })

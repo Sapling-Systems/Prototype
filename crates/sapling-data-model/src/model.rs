@@ -15,6 +15,16 @@ impl Subject {
       Subject::String { .. } => "string",
     }
   }
+
+  pub fn is_same(&self, other: &Subject) -> bool {
+    match (self, other) {
+      (Subject::Static { uuid: uuid1 }, Subject::Static { uuid: uuid2 }) => uuid1 == uuid2,
+      (Subject::Integer { value: value1 }, Subject::Integer { value: value2 }) => value1 == value2,
+      (Subject::Float { value: value1 }, Subject::Float { value: value2 }) => value1 == value2,
+      (Subject::String { value: value1 }, Subject::String { value: value2 }) => value1 == value2,
+      _ => false,
+    }
+  }
 }
 
 #[derive(Clone, Debug)]

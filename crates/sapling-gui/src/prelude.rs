@@ -1,11 +1,11 @@
 pub use crate::base::{
-  DropShadowStyle, FormattedTextView, LayoutView, StyledView, TextFormat, TextHorizontalAlignment,
-  TextVerticalAlignment, TextView, ViewStyle,
+  DropShadowStyle, FocusableInteractiveView, FormattedTextView, LayoutView, MutableState,
+  StyledView, TextFormat, TextHorizontalAlignment, TextVerticalAlignment, TextView, ViewStyle,
 };
 pub use crate::component::{
   ChildrenProperty, Component, ComponentElement, LayoutedComponent, ParentComponent,
 };
-pub use crate::input::InputState;
+pub use crate::input::{ActionMap, InputState};
 pub use crate::layout::{
   ConstraintTermValue, ElementConstraint, ElementConstraintExpression, ElementConstraintOperator,
   ElementConstraintTerm, ElementConstraintVariable, ElementConstraints, IntoConstraintTerm,
@@ -19,4 +19,4 @@ pub use crate::theme::{FontVariant, Theme};
 
 pub use sapling_gui_macro::{constraint, constraint1};
 
-pub use raylib::prelude::{Color, Rectangle, Vector2, Vector3, Vector4};
+pub use raylib::prelude::{Color, KeyboardKey, Rectangle, Vector2, Vector3, Vector4};

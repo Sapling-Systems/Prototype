@@ -63,8 +63,11 @@ impl App {
   }
 
   pub fn create_named_subject(&mut self, name: &str) -> Subject {
-    self.registry.create_global(&mut self.database, name.into());
-    System::new_named_static(&mut self.database, name)
+    self.registry.create_global(&mut self.database, name.into())
+  }
+
+  pub fn get_name(&self, subject: &Subject) -> String {
+    System::get_subject_name(&self.database, subject).unwrap_or_default()
   }
 
   pub fn query_once<'a>(&'a self, query: &Query) -> impl Iterator<Item = FoundFact<'a>> {

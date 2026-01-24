@@ -2,17 +2,17 @@ use sapling_app::App;
 use sapling_data_model::{Query, Subject, SubjectSelector};
 use sapling_query_engine::FoundFact;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SubjectFactCollection {
-  subject: SubjectSelector,
-  facts: Vec<SubjectFactCollectionFact>,
+  pub subject: SubjectSelector,
+  pub facts: Vec<SubjectFactCollectionFact>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SubjectFactCollectionFact {
-  property: Option<SubjectSelector>,
-  operator: Option<Subject>,
-  value: Option<Box<SubjectFactCollection>>,
+  pub property: Option<SubjectSelector>,
+  pub operator: Option<Subject>,
+  pub value: Option<Box<SubjectFactCollection>>,
 }
 
 impl SubjectFactCollection {
