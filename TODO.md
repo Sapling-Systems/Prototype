@@ -1,6 +1,8 @@
 # IN PROGRESS
 
 - IDE UI: Structure Editor
+  - Edit mode
+  - Insert mode
 
 # TODO
 

@@ -1,16 +1,13 @@
 use std::{any::Any, fmt::Debug};
 
 use crate::{
-  base::Pressable,
-  input::InputState,
-  layout::{ElementConstraints, ResolvedLayout},
+  layout::UserElementConstraints,
   orchestrator::{Element, ElementContext},
-  prelude::{RenderContext, Renderer},
-  theme::Theme,
+  prelude::RenderContext,
 };
 
 pub struct LayoutedComponent<T: ComponentElement> {
-  layout_constraints: Vec<ElementConstraints>,
+  layout_constraints: Vec<UserElementConstraints>,
   component: T,
 }
 
@@ -30,7 +27,7 @@ pub trait ComponentElement: Sized + Debug + 'static {
     }
   }
 
-  fn with_layout(self, layout_constraints: Vec<ElementConstraints>) -> LayoutedComponent<Self> {
+  fn with_layout(self, layout_constraints: Vec<UserElementConstraints>) -> LayoutedComponent<Self> {
     LayoutedComponent {
       layout_constraints,
       component: self,

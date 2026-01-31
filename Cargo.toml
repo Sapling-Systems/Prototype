@@ -9,7 +9,6 @@ members = [
     "crates/sapling-serialization",
     "crates/sapling-app",
     "crates/sapling-gui",
-    "crates/sapling-gui-macro",
     "crates/sapling-std",
 ]
 
@@ -38,7 +37,7 @@ proc-macro-crate = "3.2.0"
 darling = "0.23.0"
 thiserror = "2.0.17"
 anyhow = "1.0.100"
-kasuari = "0.4.11"
+petgraph = "0.8.3"
 
-[profile.dev.package.kasuari]
+[profile.dev.package.petgraph]
 opt-level = 3

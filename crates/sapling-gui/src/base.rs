@@ -1,20 +1,17 @@
 use std::{
   any::Any,
-  arch::x86_64::_MM_EXCEPT_INEXACT,
   hash::{DefaultHasher, Hash, Hasher},
   marker::PhantomData,
 };
 
-use kasuari::Strength;
 use raylib::{
   color::Color,
-  ffi::KeyboardKey,
   math::{Rectangle, Vector2, Vector4},
 };
-use sapling_gui_macro::constraint1;
 
 use crate::{
   component::Component,
+  layout::UserElementConstraints,
   prelude::{ElementContext, RenderContext, RenderFilter, StatefulContext},
   theme::FontVariant,
 };
@@ -225,16 +222,10 @@ impl Component for TextView {
 
     let mut constraints = vec![];
     if grow_width {
-      constraints.push(constraint1!(
-        self_width == expected_size.x,
-        strength = Strength::STRONG.value() as f32
-      ));
+      constraints.extend(UserElementConstraints::fixed_width(expected_size.x).constraints);
     }
     if grow_height {
-      constraints.push(constraint1!(
-        self_height == expected_size.y,
-        strength = Strength::STRONG.value() as f32
-      ));
+      constraints.extend(UserElementConstraints::fixed_height(expected_size.y).constraints);
     }
 
     context.set_parent_element_constraints(constraints);
@@ -347,16 +338,10 @@ impl Component for FormattedTextView {
 
     let mut constraints = vec![];
     if grow_width {
-      constraints.push(constraint1!(
-        self_width == expected_size.x,
-        strength = Strength::STRONG.value() as f32
-      ));
+      constraints.extend(UserElementConstraints::fixed_width(expected_size.x).constraints);
     }
     if grow_height {
-      constraints.push(constraint1!(
-        self_height == expected_size.y,
-        strength = Strength::STRONG.value() as f32
-      ));
+      constraints.extend(UserElementConstraints::fixed_height(expected_size.y).constraints);
     }
     context.set_parent_element_constraints(constraints);
   }

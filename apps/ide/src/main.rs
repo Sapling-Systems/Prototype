@@ -7,7 +7,7 @@ use crate::{
   components::{
     loc::LinesOfCodeView,
     panel::PanelView,
-    structure_editor::{StructureEditor, SubjectCollectionView, data::SubjectFactCollection},
+    structure_editor::{StructureEditor, data::SubjectFactCollection},
   },
   demo::insert_demo_data,
   input::Action,
@@ -37,6 +37,7 @@ fn main() {
   action_map.add_action(Action::EditorSelectModeRight, KeyboardKey::KEY_L);
   action_map.add_action(Action::EditorSelectModeUp, KeyboardKey::KEY_K);
   action_map.add_action(Action::EditorSelectModeDown, KeyboardKey::KEY_J);
+  action_map.add_action(Action::EditorSelectModeEdit, KeyboardKey::KEY_ENTER);
 
   while !rl.window_should_close() {
     let width = rl.get_render_width();

@@ -26,7 +26,7 @@ impl Component for PanelView {
     let _title_bar = StyledView::new()
       .with_background_color(context.theme.color_primary)
       .with_border_radius_even(context.theme.radius_default)
-      .with_layout(vec![ElementConstraints::cover_parent()])
+      .with_layout(vec![UserElementConstraints::cover_parent(0.0, 0.0)])
       .build(context);
 
     let _title = FormattedTextView::new()
@@ -37,10 +37,10 @@ impl Component for PanelView {
         FontVariant::DefaultForegroundBold,
         "Structural Editor".into(),
       )
-      .with_layout(vec![
-        ElementConstraints::relative_left(context.theme.spacing_large),
-        ElementConstraints::relative_top(context.theme.spacing_default + 2.0),
-      ])
+      .with_layout(vec![UserElementConstraints::relative_to_parent(
+        context.theme.spacing_large,
+        context.theme.spacing_default + 2.0,
+      )])
       .build(context);
 
     let content_children = self.content.take().unwrap();
@@ -49,13 +49,16 @@ impl Component for PanelView {
       .with_border_radius_even(context.theme.radius_default)
       .with_drop_shadow(context.theme.drop_shadow_default.clone())
       .with_layout(vec![
-        ElementConstraints::relative_left(0.0),
-        ElementConstraints::relative_top(context.theme.spacing_xlarge),
-        ElementConstraints::fixed_size(500.0, 300.0),
+        UserElementConstraints::relative_to_parent(0.0, context.theme.spacing_xlarge),
+        UserElementConstraints::fixed_size(500.0, 300.0),
       ])
       .with_children(|context| {
         content_children(context);
       })
       .build(context);
+  }
+
+  fn render(&self, context: &mut RenderContext) {
+    println!("PanelView Layout: {:?}", context.layout);
   }
 }

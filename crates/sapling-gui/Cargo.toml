@@ -4,8 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-kasuari.workspace = true
 raylib.workspace = true
 sapling-app.workspace = true
-sapling-gui-macro.workspace = true
 anyhow.workspace = true
+petgraph.workspace = true

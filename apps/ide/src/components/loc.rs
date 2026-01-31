@@ -37,9 +37,8 @@ impl Component for LinesOfCodeView {
       .with_background_color(context.theme.color_background_highlight)
       .with_border_radius_even(16.0)
       .with_layout(vec![
-        ElementConstraints::relative_left(0.0),
-        ElementConstraints::relative_top(0.0),
-        ElementConstraints::fixed_size(
+        UserElementConstraints::relative_to_parent(0.0, 0.0),
+        UserElementConstraints::fixed_size(
           total_width,
           total_loc_height + context.theme.spacing_default * 2.0,
         ),
@@ -52,9 +51,8 @@ impl Component for LinesOfCodeView {
       TextView::new(FontVariant::Primary, text)
         .with_horizontal_alignment(TextHorizontalAlignment::Center)
         .with_layout(vec![
-          ElementConstraints::relative_left(0.0),
-          ElementConstraints::relative_top(y),
-          ElementConstraints::fixed_width(total_width),
+          UserElementConstraints::relative_to_parent(0.0, y),
+          UserElementConstraints::fixed_width(total_width),
         ])
         .build(context);
 

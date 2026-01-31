@@ -4,4 +4,5 @@ pub enum Action {
   EditorSelectModeRight,
   EditorSelectModeUp,
   EditorSelectModeDown,
+  EditorSelectModeEdit,
 }

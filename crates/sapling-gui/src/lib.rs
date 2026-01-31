@@ -10,4 +10,5 @@ mod renderer;
 mod theme;
 
 pub use debugger::DebuggerView;
+pub use layout::{ConstraintResolver, ElementVariable, RelationshipMeta};
 pub use renderer::{NoopRenderer, RaylibRenderer, RaylibRendererState};

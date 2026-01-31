@@ -2,7 +2,7 @@ use raylib::color::Color;
 
 use crate::{
   base::{MutableState, Pressable, StyledView, TextView},
-  layout::ElementConstraints,
+  layout::ConstraintVariable,
   orchestrator::DebugAllocatedElement,
   prelude::*,
   theme::FontVariant,
@@ -26,11 +26,9 @@ impl Component for DebuggerView {
       .with_background_color(Color::BLACK.alpha(0.4))
       .with_border(1.0, Color::RED.alpha(0.8))
       .with_border_radius_even(16.0)
-      .with_layout(vec![
-        ElementConstraints::absolute_top(32.0),
-        ElementConstraints::absolute_right(32.0),
-        ElementConstraints::fixed_size(600.0, 500.0),
-      ])
+      .with_layout(vec![UserElementConstraints::floating_top_right(
+        32.0, 32.0, 600.0, 500.0,
+      )])
       .with_children(move |context| {
         if let Some(root_node) = context
           .prev_debug_nodes
@@ -55,11 +53,9 @@ impl Component for DebuggerView {
       let layout = selected_node.layout.clone();
 
       LayoutView
-        .with_layout(vec![
-          ElementConstraints::absolute_top(38.0),
-          ElementConstraints::absolute_right(32.0),
-          ElementConstraints::fixed_size(300.0, 500.0),
-        ])
+        .with_layout(vec![UserElementConstraints::floating_top_right(
+          38.0, 32.0, 300.0, 500.0,
+        )])
         .with_children(move |context| {
           let mut offset = 50.0;
           TextView::new(
@@ -70,9 +66,10 @@ impl Component for DebuggerView {
             component_name,
           )
           .with_horizontal_alignment(TextHorizontalAlignment::Center)
-          .with_layout(vec![ElementConstraints::cover_parent()])
+          .with_layout(vec![UserElementConstraints::cover_parent(0.0, 0.0)])
           .build(context);
 
+          /*
           for line in component_debug.lines() {
             TextView::new(
               FontVariant::Custom {
@@ -81,13 +78,13 @@ impl Component for DebuggerView {
               },
               line.to_string(),
             )
-            .with_layout(vec![
-              ElementConstraints::relative_top(offset),
-              ElementConstraints::relative_left(0.0),
-            ])
+            .with_layout(vec![UserElementConstraints::relative_to_parent(
+              0.0, offset,
+            )])
             .build(context);
             offset += 14.0;
           }
+          */
 
           offset += 12.0;
           TextView::new(
@@ -97,19 +94,17 @@ impl Component for DebuggerView {
             },
             "Layout Constraints".to_string(),
           )
-          .with_layout(vec![
-            ElementConstraints::relative_top(offset),
-            ElementConstraints::relative_left(0.0),
-          ])
+          .with_layout(vec![UserElementConstraints::relative_to_parent(
+            0.0, offset,
+          )])
           .build(context);
           offset += 18.0;
 
-          for constraint in &constraints.constraints {
+          for constraint in &constraints {
             ConstraintTextView::new(constraint.clone())
-              .with_layout(vec![
-                ElementConstraints::relative_top(offset),
-                ElementConstraints::relative_left(0.0),
-              ])
+              .with_layout(vec![UserElementConstraints::relative_to_parent(
+                0.0, offset,
+              )])
               .build(context);
             offset += 16.0;
           }
@@ -121,10 +116,9 @@ impl Component for DebuggerView {
             },
             "Resolved Layout".to_string(),
           )
-          .with_layout(vec![
-            ElementConstraints::relative_top(offset),
-            ElementConstraints::relative_left(0.0),
-          ])
+          .with_layout(vec![UserElementConstraints::relative_to_parent(
+            0.0, offset,
+          )])
           .build(context);
           offset += 18.0;
 
@@ -138,10 +132,9 @@ impl Component for DebuggerView {
               layout.x, layout.y, layout.width, layout.height
             ),
           )
-          .with_layout(vec![
-            ElementConstraints::relative_top(offset),
-            ElementConstraints::relative_left(0.0),
-          ])
+          .with_layout(vec![UserElementConstraints::relative_to_parent(
+            0.0, offset,
+          )])
           .build(context);
           offset += 18.0;
         })
@@ -150,20 +143,21 @@ impl Component for DebuggerView {
       HighlightOverlayView::new(selected_node.clone(), Color::RED.alpha(0.4)).build(context);
 
       let mut dependencies = Vec::new();
-      for constraint in &selected_node.layout_constraints.constraints {
-        dependencies.extend(constraint.expression.terms.iter().filter_map(
-          |term| match term.variable {
-            ElementConstraintVariable::ParentX => selected_node.parent_id,
-            ElementConstraintVariable::ParentY => selected_node.parent_id,
-            ElementConstraintVariable::ParentWidth => selected_node.parent_id,
-            ElementConstraintVariable::ParentHeight => selected_node.parent_id,
-            ElementConstraintVariable::ElementX(element) => Some(element.id),
-            ElementConstraintVariable::ElementY(element) => Some(element.id),
-            ElementConstraintVariable::ElementWidth(element) => Some(element.id),
-            ElementConstraintVariable::ElementHeight(element) => Some(element.id),
+      for constraint in &selected_node.layout_constraints {
+        for dependency in constraint.get_explicit_mentioned_variables() {
+          let added = match dependency {
+            ConstraintVariable::ParentX => selected_node.parent_id,
+            ConstraintVariable::ParentY => selected_node.parent_id,
+            ConstraintVariable::ParentWidth => selected_node.parent_id,
+            ConstraintVariable::ParentHeight => selected_node.parent_id,
+            ConstraintVariable::ElementX { id } => Some(id),
+            ConstraintVariable::ElementY { id } => Some(id),
+            ConstraintVariable::ElementWidth { id } => Some(id),
+            ConstraintVariable::ElementHeight { id } => Some(id),
             _ => None,
-          },
-        ));
+          };
+          dependencies.extend(added);
+        }
       }
       dependencies.sort_unstable();
       dependencies.dedup();
@@ -198,11 +192,11 @@ fn render_node_recursive(
     println!("Element clicked in debugger:\n{}", node.debug_info);
   })
   .with_layout(vec![
-    ElementConstraints::relative_left(
+    UserElementConstraints::relative_to_parent(
       indentation as f32 * context.theme.spacing_large + context.theme.spacing_default,
+      *height,
     ),
-    ElementConstraints::relative_top(*height),
-    ElementConstraints::fixed_size(10.0, 10.0),
+    UserElementConstraints::fixed_size(10.0, 10.0),
   ])
   .with_children(move |context| {
     TextView::new(
@@ -218,11 +212,11 @@ fn render_node_recursive(
     .with_border(1.0, Color::RED.alpha(0.8))
     .with_border_radius_even(16.0)
     .with_layout(vec![
-      ElementConstraints::relative_left(
+      UserElementConstraints::relative_to_parent(
         indentation as f32 * context.theme.spacing_large + context.theme.spacing_default,
+        *height,
       ),
-      ElementConstraints::relative_top(*height),
-      ElementConstraints::fixed_size(10.0, 10.0),
+      UserElementConstraints::fixed_size(10.0, 10.0),
     ])
     .build(context);
 
@@ -255,8 +249,8 @@ impl Component for HighlightOverlayView {
     StyledView::new()
       .with_border(2.0, self.color)
       .with_layout(vec![
-        ElementConstraints::absolute_position(self.node.layout.x, self.node.layout.y),
-        ElementConstraints::fixed_size(self.node.layout.width, self.node.layout.height),
+        UserElementConstraints::absolute_position(self.node.layout.x, self.node.layout.y),
+        UserElementConstraints::fixed_size(self.node.layout.width, self.node.layout.height),
       ])
       .build(context);
 
@@ -267,7 +261,7 @@ impl Component for HighlightOverlayView {
       },
       format!("${}", self.node.id),
     )
-    .with_layout(vec![ElementConstraints::absolute_position(
+    .with_layout(vec![UserElementConstraints::absolute_position(
       self.node.layout.x + self.node.layout.width + 2.0,
       self.node.layout.y - 8.0,
     )])
@@ -277,69 +271,23 @@ impl Component for HighlightOverlayView {
 
 #[derive(Debug)]
 struct ConstraintTextView {
-  constraint: ElementConstraint,
+  constraint: CompiledConstraint,
 }
 
 impl ConstraintTextView {
-  fn new(constraint: ElementConstraint) -> Self {
+  fn new(constraint: CompiledConstraint) -> Self {
     Self { constraint }
   }
 }
 
 impl Component for ConstraintTextView {
   fn construct(&mut self, context: &mut ElementContext) {
-    let operator = match self.constraint.operator {
-      ElementConstraintOperator::Equal => "=",
-      ElementConstraintOperator::GreaterOrEqual => ">=",
-      ElementConstraintOperator::LessOrEqual => "<=",
-    };
-
-    let mut expression = String::new();
-    for (index, term) in self.constraint.expression.terms.iter().enumerate() {
-      let var_name = match term.variable {
-        ElementConstraintVariable::ElementX(element) => format!("${}::x", element.id),
-        ElementConstraintVariable::ElementY(element) => format!("${}::y", element.id),
-        ElementConstraintVariable::ElementWidth(element) => format!("${}::width", element.id),
-        ElementConstraintVariable::ElementHeight(element) => format!("${}::height", element.id),
-        ElementConstraintVariable::ParentX => "parent::x".to_string(),
-        ElementConstraintVariable::ParentY => "parent::y".to_string(),
-        ElementConstraintVariable::ParentWidth => "parent::width".to_string(),
-        ElementConstraintVariable::ParentHeight => "parent::height".to_string(),
-        ElementConstraintVariable::SelfX => "x".to_string(),
-        ElementConstraintVariable::SelfY => "y".to_string(),
-        ElementConstraintVariable::SelfWidth => "width".to_string(),
-        ElementConstraintVariable::SelfHeight => "height".to_string(),
-        ElementConstraintVariable::ScreenWidth => "screen::width".to_string(),
-        ElementConstraintVariable::ScreenHeight => "screen::height".to_string(),
-      };
-      if term.coefficient == 1.0 {
-        expression.push_str(&var_name);
-      } else if term.coefficient == -1.0 {
-        expression.push_str(&format!("-{}", var_name));
-      } else {
-        expression.push_str(&format!("{} * {}", term.coefficient, var_name));
-      }
-
-      if index != self.constraint.expression.terms.len() - 1 {
-        expression.push_str(" + ");
-      }
-    }
-
-    if self.constraint.expression.constant != 0.0 {
-      expression.push_str(&format!(" + {}", self.constraint.expression.constant));
-    }
-
-    let text = format!(
-      "{} {} 0 [{}]",
-      expression, operator, self.constraint.strength
-    );
-
     TextView::new(
       FontVariant::Custom {
         color: Color::WHITE,
         size: 14.0,
       },
-      text,
+      self.constraint.get_formular(),
     )
     .build(context);
   }
